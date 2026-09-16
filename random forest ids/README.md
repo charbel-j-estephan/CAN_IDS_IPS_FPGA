@@ -170,29 +170,85 @@ The smallest 100 % model is 2 comparators. The selector does not pick it:
 it, and `--max-nodes` keeps that in budget. 23 comparators instead of 2 is a
 rounding error in area.
 
-### Adaptive attacker, on generated traces
+### Adaptive attacker, on real traffic
 
-The real DoS capture contains only the crude `0x000` flood, so it cannot answer
-what happens against an attacker who floods a legitimate ID with plausible
-payloads. `src/make_trace.py --stealth` builds that case, which blinds `hd`,
-`pl_popcount` and `pl_violation` and leaves only timing:
+The real DoS capture contains only the crude attack, so it cannot answer what
+happens against an attacker who floods a legitimate ID. `src/attack_on_real.py`
+answers it with the files already here: it takes HCRL's attack-free
+`normal_run_data.txt`, 988 871 frames of genuine vehicle traffic, and injects a
+flood on top. The background traffic, its jitter, its payload behaviour and its
+ID mix are all real; only the attack is synthetic, and the attack is the part
+whose parameters are documented (0.3 ms period, 3 to 5 s bursts, ~16 % of
+frames).
 
-| trees | nodes | accuracy | recall | FP | FN |
-|---|---|---|---|---|---|
-| 1 | 3 | 99.5835 % | 99.9828 % | 5785 | 31 |
-| 3 | 9 | 99.5851 % | 99.9823 % | 5761 | 32 |
-| 1 | 12 | 99.7479 % | 99.2804 % | 2222 | 1298 |
-| 3 | 20 | 99.6057 % | 99.9834 % | 5476 | 30 |
-| 9 | 277 | 99.7660 % | — | 2309 | 958 |
+Three modes, flooding the busiest legitimate ID `0x2c0`:
 
-Without the rate buckets the ceiling is 99.5311 %; with them, 99.7660 %. More
-usefully, **3 comparators with the rate feature beat 156 comparators without
-it.** Going from 3 nodes to 277 buys 0.18 points, so the ceiling is set by the
-features, not by forest size. This is the argument for small trees.
+| mode | best accuracy | nodes | FP | FN |
+|---|---|---|---|---|
+| `zero-id` (reproduces the real DoS attack) | 100.0000 % | 1 | 0 | 0 |
+| `valid-id` (legit ID, all-zero payload) | 99.9996 % | 5 | 0 | 2 |
+| `stealth` (legit ID, replayed real payloads) | 99.5386 % | 7 | 2421 | 5 |
 
-Accuracy is also the wrong thing to rank on here. The 12-node row scores higher
-than the 20-node row while missing 1298 attacks instead of 30, so the model for
-this case is selected on recall.
+On the stealth case every feature set converges to the same 99.5386 %, and the
+reason is worth stating precisely. With 3 trees and 6 comparators:
+
+* all 2421 false positives are on `0x2c0`, none on any other ID
+* all 5 false negatives are on `0x2c0`
+* the other 26 IDs are classified perfectly
+
+The entire residual error is the victim's own frames, 2421 of its 22 160.
+During a flood those frames arrive at the flood period like everything else
+carrying that ID, so they are genuinely ambiguous per frame. That is a property
+of the problem, not of the model, and no amount of extra trees moves it.
+
+### The 100 % model does not survive an adaptive attacker
+
+This is the most important measurement here. Taking the model trained on the
+real DoS capture, the one that scores 100 %, and running it unchanged against
+the other attacks:
+
+| trace | accuracy | recall | FP | FN |
+|---|---|---|---|---|
+| real DoS capture (its own data) | 100.0000 % | 100.0000 % | 0 | 0 |
+| `zero-id` flood, different drive | 95.7927 % | 100.0000 % | 22 120 | 0 |
+| `valid-id` flood | 95.7918 % | 99.9946 % | 22 120 | 5 |
+| **`stealth` flood** | 78.0178 % | **0.0000 %** | 22 120 | 93 453 |
+
+**Recall zero.** It misses every single injected frame.
+
+The forest's own thresholds explain it. Two of its seven trees root on
+`pl_popcount <= 0`, meaning "the payload is all zeros". Another roots on
+`dt_ratio_q6 <= 0`, and a ratio of exactly zero happens only when an ID has no
+baseline entry at all. So the model that scores 100 % learned "this ID is not
+in the whitelist, and its payload is blank". A flood that reuses a valid ID with
+plausible payloads produces ratio 1 and a nonzero payload, and walks straight
+through.
+
+That is what a 100 % number on this dataset is worth. It is reported here as a
+measurement rather than a caveat because it was easy to state as a caveat and
+harder, and more useful, to demonstrate.
+
+### The model to actually deploy
+
+Train on the hardest case, not the easiest. The model selected on the stealth
+trace is **3 trees, 14 comparator nodes, depth 3**, and it covers everything:
+
+| trace | accuracy | recall | FP | FN |
+|---|---|---|---|---|
+| `zero-id` flood | 100.0000 % | 100.0000 % | 0 | 0 |
+| `valid-id` flood | 99.5386 % | 99.9946 % | 2421 | 5 |
+| `stealth` flood | 99.5386 % | 99.9946 % | 2421 | 5 |
+| real DoS capture, **different drive** | 99.4085 % | 93.4007 % | **0** | 9758 |
+
+Nine fewer comparators than the 100 % model, and it is the only one of the two
+that works against an attacker who has read the paper.
+
+The last row is a separate finding: the baseline ROM learned from one drive,
+applied to a capture recorded eleven days earlier, produced **zero false alarms**
+across 3.07 million normal frames. The per-ID timing baseline transfers across
+drives cleanly. Recall drops to 93.4 % there because the model was trained
+against a flood of a known ID and the DoS capture floods an unknown one, which
+argues for training on a mix of attack styles rather than one.
 
 ## Hardware
 
@@ -233,11 +289,17 @@ both truncations rather than assuming it.
 
 Last run, on the selected 3-tree 12-comparator model:
 
-Last run, on the real-data model (7 trees, 23 comparators):
+Last run, on both frozen models:
 
 ```
-tb_rf_forest     checked 300000 real test vectors, 0 mismatches   PASS
-tb_can_ids_top   checked 200000 real CAN frames,   0 mismatches   PASS
+real DoS model, 7 trees / 23 comparators
+  tb_rf_forest     300000 real test vectors, 0 mismatches   PASS
+  tb_can_ids_top   200000 real CAN frames,   0 mismatches   PASS
+
+recommended model, 3 trees / 14 comparators   (rtl/recommended/)
+  tb_rf_forest     300000 test vectors,      0 mismatches   PASS
+  tb_can_ids_top   200000 real CAN frames,   0 mismatches   PASS
+
 integer tables vs sklearn trees: 0 mismatches on train, 0 on test
 ```
 
@@ -267,6 +329,7 @@ src/export_verilog.py  generate the forest RTL and both testbenches
 src/hw_report.py       area, latency and throughput budget
 src/report.py          markdown report of every sweep
 src/cross_eval.py      score one frozen model against other attack styles
+src/attack_on_real.py  inject a flood into HCRL's real attack-free capture
 rtl/can_ids_features.v feature extractor
 rtl/can_ids_top.v      top level
 run_all.sh             CSV in, verified Verilog out

@@ -1,0 +1,7 @@
+loaded 1168352 frames, 15.36 % injected
+train truncation 525758 frames, 16.36 % injected
+test  truncation 525758 frames, 17.77 % injected
+baseline learned for 27 CAN IDs
+IDs in test that were never seen clean in train: ['0x0']
+raw test frames -> results/realatk_zero-id/raw_test.npz
+cached -> results/realatk_zero-id/cache.npz

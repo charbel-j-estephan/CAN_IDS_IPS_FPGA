@@ -60,6 +60,86 @@ budget, only the area.
 | 3 | 8 | 202 | 98.3036% | 90.8051% | 18294 | 9689 | dt_id_dev,hd_dev |
 | 3 | 8 | 208 | 98.3037% | 90.8054% | 18293 | 9689 | dt_id_dev,hd_dev |
 
+## dataset: `realatk_stealth`
+
+### feature set `timing` — no identity features, payload-content features included
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 3 | 99.5384% | 98.7181% | 2423 | 4 | dt_id_dev,dt_ratio_q6,id_rate |
+| 3 | 2 | 7 | 99.5386% | 98.7186% | 2421 | 5 | dt_id,dt_id_dev,dt_ratio_q6,pl_popcount,id_rate |
+
+### feature set `timing_only` — no identity features, no payload-content features
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 3 | 99.5384% | 98.7181% | 2423 | 4 | dt_id,burst |
+| 3 | 2 | 8 | 99.5386% | 98.7186% | 2421 | 5 | dt_id,dt_id_dev,burst |
+
+### feature set `paper` — the reference paper's two features only
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 3 | 99.2032% | 97.8078% | 4184 | 5 | dt_id_dev,hd_dev |
+| 1 | 3 | 5 | 99.3784% | 98.2815% | 3263 | 5 | dt_id_dev,hd_dev |
+| 1 | 5 | 10 | 99.5184% | 98.6633% | 2527 | 5 | dt_id_dev,hd_dev |
+| 1 | 6 | 12 | 99.5386% | 98.7186% | 2421 | 5 | dt_id_dev,hd_dev |
+
+## dataset: `realatk_valid-id`
+
+### feature set `timing` — no identity features, payload-content features included
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 1 | 1 | 95.1044% | 87.8958% | 25739 | 0 | pl_violation |
+| 3 | 2 | 5 | 99.9996% | 99.9989% | 0 | 2 | dt_id,dt_ratio_q6,pl_violation,pl_popcount |
+
+### feature set `timing_only` — no identity features, no payload-content features
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 3 | 99.5390% | 98.6861% | 0 | 2424 | dt_ratio_q6,hd_dev,bus_rate |
+| 1 | 3 | 5 | 99.6559% | 99.0370% | 1376 | 433 | dt_ratio_q6,hd_dev,dt_bus,burst,bus_rate |
+| 1 | 4 | 8 | 99.6637% | 99.0610% | 1572 | 196 | dt_id,dt_ratio_q6,hd_dev,dt_bus,burst,bus_rate |
+| 1 | 5 | 14 | 99.6677% | 99.0703% | 1373 | 374 | dt_id,dt_id_dev,hd,hd_dev,dt_bus,burst,id_rate,bus_rate |
+| 1 | 8 | 33 | 99.6721% | 99.0819% | 1298 | 426 | dt_id,dt_id_dev,dt_ratio_q6,hd_dev,dt_bus,burst,id_rate,bus_rate |
+
+### feature set `paper` — the reference paper's two features only
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 3 | 99.2032% | 97.8078% | 4184 | 5 | dt_id_dev,hd_dev |
+| 1 | 3 | 5 | 99.3786% | 98.2372% | 843 | 2424 | dt_id_dev,hd_dev |
+| 1 | 5 | 11 | 99.5186% | 98.6288% | 107 | 2424 | dt_id_dev,hd_dev |
+| 1 | 6 | 13 | 99.5196% | 98.6665% | 2521 | 5 | dt_id_dev,hd_dev |
+| 1 | 6 | 14 | 99.5243% | 98.6483% | 313 | 2188 | dt_id_dev,hd_dev |
+| 1 | 7 | 16 | 99.5445% | 98.7049% | 207 | 2188 | dt_id_dev,hd_dev |
+| 3 | 8 | 58 | 99.5469% | 98.7118% | 194 | 2188 | dt_id_dev,hd_dev |
+
+## dataset: `realatk_zero-id`
+
+### feature set `timing` — no identity features, payload-content features included
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 1 | 1 | 100.0000% | 100.0000% | 0 | 0 | dt_ratio_q6 |
+
+### feature set `timing_only` — no identity features, no payload-content features
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 1 | 1 | 100.0000% | 100.0000% | 0 | 0 | dt_ratio_q6 |
+
+### feature set `paper` — the reference paper's two features only
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 2 | 82.2251% | 0.0000% | 0 | 93453 | dt_id_dev,hd_dev |
+| 1 | 3 | 3 | 95.4793% | 88.6222% | 22880 | 888 | dt_id_dev,hd_dev |
+| 1 | 5 | 6 | 97.7798% | 93.9810% | 9351 | 2322 | dt_id_dev,hd_dev |
+| 1 | 6 | 8 | 97.9898% | 94.0200% | 201 | 10368 | dt_id_dev,hd_dev |
+| 1 | 7 | 10 | 99.2789% | 97.9366% | 305 | 3486 | dt_id_dev,hd_dev |
+
 ## dataset: `stealth`
 
 ### feature set `timing` — no identity features, payload-content features included

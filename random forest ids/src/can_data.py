@@ -123,9 +123,19 @@ def load_hcrl_normal_txt(path: str, nrows: int | None = None) -> pd.DataFrame:
         on_bad_lines="skip",
     )
 
+    # HCRL's capture ends with a truncated record that carries a timestamp and
+    # nothing else, so drop any row without a parseable DLC rather than crash.
+    dlc_num = pd.to_numeric(raw[6], errors="coerce")
+    complete = dlc_num.notna().to_numpy()
+    dropped = int((~complete).sum())
+    if dropped:
+        print(f"load_hcrl_normal_txt: dropped {dropped} incomplete record(s)")
+    raw = raw[complete].reset_index(drop=True)
+    dlc_num = dlc_num[complete].reset_index(drop=True)
+
     timestamp = raw[1].astype(np.float64).to_numpy()
     can_id = _hex_to_int(raw[3])
-    dlc = np.clip(raw[6].astype(np.int64).to_numpy(), 0, 8)
+    dlc = np.clip(dlc_num.astype(np.int64).to_numpy(), 0, 8)
 
     payload = np.zeros(len(raw), dtype=np.uint64)
     for i in range(8):
