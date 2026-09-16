@@ -98,3 +98,47 @@ def truncate(df: pd.DataFrame, start_frac: float, end_frac: float) -> pd.DataFra
     lo = int(round(start_frac * n))
     hi = int(round(end_frac * n))
     return df.iloc[lo:hi].reset_index(drop=True)
+
+
+def load_hcrl_normal_txt(path: str, nrows: int | None = None) -> pd.DataFrame:
+    """Read HCRL's attack-free capture, `normal_run_data.txt`.
+
+    Different layout from the attack CSVs, whitespace separated:
+
+        Timestamp: 1479121434.850202    ID: 0350    000    DLC: 8    05 28 ... a2
+
+    Every frame is normal, so label is 0 throughout. This capture is from a
+    separate drive, so it is the honest source for the per-ID baseline: a
+    deployed IDS learns its ROM contents from clean traffic recorded earlier,
+    not from the normal frames of a capture that is already under attack.
+    """
+    raw = pd.read_csv(
+        path,
+        sep=r"\s+",
+        header=None,
+        names=list(range(15)),
+        dtype=str,
+        nrows=nrows,
+        engine="python",
+        on_bad_lines="skip",
+    )
+
+    timestamp = raw[1].astype(np.float64).to_numpy()
+    can_id = _hex_to_int(raw[3])
+    dlc = np.clip(raw[6].astype(np.int64).to_numpy(), 0, 8)
+
+    payload = np.zeros(len(raw), dtype=np.uint64)
+    for i in range(8):
+        vals = _hex_to_int(raw[7 + i]).astype(np.uint64)
+        keep = (i < dlc).astype(np.uint64)
+        payload |= (vals * keep) << np.uint64(8 * (7 - i))
+
+    return pd.DataFrame(
+        {
+            "timestamp": timestamp,
+            "can_id": can_id,
+            "dlc": dlc,
+            "payload": payload,
+            "label": np.zeros(len(raw), dtype=np.int8),
+        }
+    )

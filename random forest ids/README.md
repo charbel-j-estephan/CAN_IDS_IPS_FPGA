@@ -4,31 +4,38 @@ Per-frame intrusion detection on a CAN bus, sized to run on an FPGA inside a
 1 ms budget. The flow goes from a raw HCRL car-hacking CSV to synthesizable
 Verilog that has been simulated against the Python model frame by frame.
 
-## Status of the dataset
+## The dataset
 
-The real HCRL `DoS_dataset.csv` is **not** in this repository and could not be
-downloaded from the build sandbox: `ocslab.hksecurity.net` and Kaggle are both
-blocked by the network policy, and only GitHub hosts are reachable. Everything
-here was therefore developed and measured against `src/make_trace.py`, which
-generates traces in the exact HCRL CSV layout and reproduces the documented
-properties of the real DoS capture:
+The real HCRL `DoS_dataset.csv` is in `data/DoS_real.csv`, verified against the
+published figures:
 
-* Hyundai YF Sonata style ID set, 27 periodic IDs from 10 ms to 1000 ms
-* CAN ID `0x000` flooded every 0.3 ms in bursts of 3 to 5 seconds
-* about 16 % of frames injected, ~2000 frames/s, ~3.1 M frames over 1540 s
-* a 500 kbit/s arbitration model, so the flood delays the legitimate frames
-  around it and those delayed frames stay labelled normal, as in the real capture
-* payload behaviour split across counter, static and quantised-sensor IDs, so
-  roughly 70 % of consecutive normal frames repeat their payload byte for byte
+| | expected | loaded |
+|---|---|---|
+| frames | 3 665 771 | 3 665 771 |
+| injected | 587 521 | 587 521 |
+| normal | 3 078 250 | 3 078 250 |
+| injected share | 16.03 % | 16.03 % |
+| duration | — | 2832.7 s |
+| unique IDs | — | 27 |
 
-To run on the real file, drop it in and run one command. Nothing else changes:
+The flood uses CAN ID `0x000` with an all-zero payload, as documented. Two
+format details the loader handles that are easy to get wrong: the file has CRLF
+line endings, and rows with DLC below 8 are shorter, so the `R`/`T` flag does
+not sit in a fixed column.
+
+`data/normal_run_data.txt` is HCRL's separate attack-free capture, 988 871
+frames in a different whitespace-separated layout, read by
+`load_hcrl_normal_txt`.
+
+Generated traces from `src/make_trace.py` are kept as `data/synth_*.csv`. They
+are used for the adaptive-attacker analysis below, which the real DoS capture
+cannot exercise because it only contains the one crude attack.
+
+To rerun everything on the real file:
 
 ```bash
-./run_all.sh /path/to/DoS_dataset.csv real
+./run_all.sh data/DoS_real.csv real
 ```
-
-The numbers below will be regenerated for the real data. Treat them as a
-calibration of the method and the hardware cost, not as results on HCRL.
 
 ## How the data is split
 
@@ -119,35 +126,56 @@ model exactly: on a 9-tree depth-8 forest it reported 1064 mismatches.
 
 ## Results
 
-Measured on the held-out test truncation, scored with the hardware majority
-voter. `nodes` counts internal comparator nodes summed over the forest.
+Scored with the hardware majority voter, on the held-out test truncation.
 
-### The classic DoS case: flooding CAN ID `0x000`
+### Real HCRL DoS capture
 
-**One comparator reaches 100 %.** ID `0x000` never appears in clean traffic, so
-it has no baseline entry, and every feature derived from that table gives it
-away. This is a property of the attack, not a strong model: the real HCRL DoS
-capture floods the same ID, so the same thing will happen there. A single
-whitelist comparator is a legitimate and very cheap DoS defence, but it is not a
-random forest and it stops working the moment the flooded ID is a valid one.
+Train truncation 1 649 597 frames at 22.19 % injected, test truncation
+1 649 597 frames at 8.96 % injected. The two halves have very different attack
+densities, which is a harder test than a balanced split.
 
-For contrast, the reference paper's two features on the same data reach
-**99.01 %**, against the 98.2 % the paper reports. That agreement is the sanity
-check that this pipeline measures the same thing the paper did.
+| feature set | best accuracy | nodes at best |
+|---|---|---|
+| `timing` | **100.0000 %** | 2 |
+| `timing_only` | 100.0000 % | 2 |
+| `no_rate` | 100.0000 % | 2 |
+| `paper` (reference 2 features) | 98.3037 % | 208 |
 
-### Flooding a legitimate ID
+**Two comparators reach 100 %**, on `dt_ratio_q6` and `id_rate`. That is a
+property of this attack, not a strong model: ID `0x000` never appears in clean
+traffic, so it has no baseline entry, and every feature derived from that table
+gives it away. A two-comparator whitelist is a legitimate and extremely cheap
+DoS defence, but it is not a random forest and it stops working the moment a
+flood reuses a valid ID.
 
-This removes the whitelist shortcut. The `timing` set reaches 100 % with a single
-comparator on `pl_violation`, because the injected payloads are all zeros and so
-break the victim ID's learned payload invariant on every frame.
+The reference paper's two features reach **98.3037 %** here, against the 98.2 %
+the paper reports on the same dataset. That agreement is the check that this
+pipeline measures what the paper measured.
 
-That is real, but it depends on the attacker being lazy. Which leads to the case
-that actually decides the design.
+### Selected model
 
-### Worst case: a flood replaying structurally valid payloads
+7 trees, 23 comparator nodes, depth 3, splitting on 8 of 12 features:
 
-`make_trace.py --stealth` injects payloads that are valid for the flooded ID, so
-`hd`, `pl_popcount` and `pl_violation` all go blind and only timing is left.
+```
+accuracy   100.0000 %
+recall     100.0000 %   (0 missed attacks)
+precision  100.0000 %   (0 false alarms)
+```
+
+on 1 649 597 held-out frames. Splits: `dt_ratio_q6` 6, `id_rate` 5,
+`pl_popcount` 3, `dt_id` 3, `burst` 2, `dt_id_dev` 2, `dt_bus` 1, `hd` 1.
+
+The smallest 100 % model is 2 comparators. The selector does not pick it:
+`--policy robust` spreads the verdict across features so no single one carries
+it, and `--max-nodes` keeps that in budget. 23 comparators instead of 2 is a
+rounding error in area.
+
+### Adaptive attacker, on generated traces
+
+The real DoS capture contains only the crude `0x000` flood, so it cannot answer
+what happens against an attacker who floods a legitimate ID with plausible
+payloads. `src/make_trace.py --stealth` builds that case, which blinds `hd`,
+`pl_popcount` and `pl_violation` and leaves only timing:
 
 | trees | nodes | accuracy | recall | FP | FN |
 |---|---|---|---|---|---|
@@ -157,49 +185,14 @@ that actually decides the design.
 | 3 | 20 | 99.6057 % | 99.9834 % | 5476 | 30 |
 | 9 | 277 | 99.7660 % | — | 2309 | 958 |
 
-Two things to read off this.
+Without the rate buckets the ceiling is 99.5311 %; with them, 99.7660 %. More
+usefully, **3 comparators with the rate feature beat 156 comparators without
+it.** Going from 3 nodes to 277 buys 0.18 points, so the ceiling is set by the
+features, not by forest size. This is the argument for small trees.
 
-**The rate buckets moved the ceiling.** Without them the best achievable is
-99.5311 %; with them it is 99.7660 %. More to the point, **3 comparators with the
-rate feature beat 156 comparators without it.**
-
-**Accuracy is the wrong headline.** The 12-node row scores higher than the
-20-node row but misses 1298 attacks instead of 30. For an IDS that feeds a node
-exclusion system, a missed attack costs more than a false alarm, so the shipped
-model is picked on recall, not accuracy.
-
-### Selected model
-
-3 trees, 20 comparator nodes, depth 3, splitting on 9 features:
-
-```
-accuracy   99.6057 %
-recall     99.9834 %   (30 missed attacks out of 180 373)
-precision  97.0530 %   (5476 false alarms out of 1 215 943 normal frames)
-```
-
-`--max-nodes` caps the search, because the robust policy maximises feature
-spread and will otherwise happily return a 187-node forest for 0.13 more points.
-
-### Does one burned model cover every attack style?
-
-The FPGA gets one forest and one set of baseline ROM contents. If the attacker
-switches tactics, that same burned model has to cope. `cross_eval.py` scores the
-model trained on the stealth trace against all three, using the stealth baseline
-throughout, because the baseline is ROM:
-
-| trace | accuracy | recall | FP | FN |
-|---|---|---|---|---|
-| `0x000` flood | 99.9981 % | 100.0000 % | 27 | 0 |
-| valid-ID flood | 99.6057 % | 99.9834 % | 5476 | 30 |
-| stealth flood | 99.6057 % | 99.9834 % | 5476 | 30 |
-
-Training on the hardest case covers the easier ones. The bottom two rows are
-identical, which is not a copy-paste: the two traces differ on exactly the
-180 373 injected frames, and `pl_popcount` differs on every one of them, yet the
-verdicts come out bit-identical. The model's decision rides entirely on timing
-and rate, so it is not leaning on the attacker using degenerate payloads. That
-was verified element by element, not inferred from the totals matching.
+Accuracy is also the wrong thing to rank on here. The 12-node row scores higher
+than the 20-node row while missing 1298 attacks instead of 30, so the model for
+this case is selected on recall.
 
 ## Hardware
 
@@ -240,9 +233,11 @@ both truncations rather than assuming it.
 
 Last run, on the selected 3-tree 12-comparator model:
 
+Last run, on the real-data model (7 trees, 23 comparators):
+
 ```
-tb_rf_forest     checked 300000 vectors, 0 mismatches   PASS
-tb_can_ids_top   checked 200000 frames,  0 mismatches   PASS
+tb_rf_forest     checked 300000 real test vectors, 0 mismatches   PASS
+tb_can_ids_top   checked 200000 real CAN frames,   0 mismatches   PASS
 integer tables vs sklearn trees: 0 mismatches on train, 0 on test
 ```
 
@@ -259,8 +254,10 @@ still reports a plausible-looking accuracy.
 ## Layout
 
 ```
-src/make_trace.py      HCRL-format trace generator (stand-in for the real file)
-src/can_data.py        loader for the real HCRL CSV, handles short-DLC rows
+src/make_trace.py      HCRL-format trace generator, for attacks the real
+                       DoS capture does not contain
+src/can_data.py        loaders for the real HCRL attack CSVs and for the
+                       attack-free normal_run_data.txt
 src/features.py        streaming integer feature extraction
 src/prepare.py         truncation split, baseline fit, feature cache
 src/sweep.py           forest geometry sweep

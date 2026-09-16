@@ -34,6 +34,32 @@ budget, only the area.
 | 1 | 8 | 30 | 99.0070% | 96.0751% | 3201 | 10665 | dt_id_dev,hd_dev |
 | 1 | 8 | 38 | 99.0140% | 96.1014% | 3072 | 10695 | dt_id_dev,hd_dev |
 
+## dataset: `real`
+
+### feature set `timing` — no identity features, payload-content features included
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 2 | 100.0000% | 100.0000% | 0 | 0 | dt_ratio_q6,id_rate |
+
+### feature set `timing_only` — no identity features, no payload-content features
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 2 | 100.0000% | 100.0000% | 0 | 0 | dt_ratio_q6,id_rate |
+
+### feature set `paper` — the reference paper's two features only
+
+| trees | depth | nodes | accuracy | F1 | FP | FN | split on |
+|---|---|---|---|---|---|---|---|
+| 1 | 2 | 3 | 93.3957% | 66.2283% | 67903 | 41041 | dt_id_dev,hd_dev |
+| 1 | 3 | 5 | 95.0091% | 72.1836% | 41289 | 41041 | dt_id_dev,hd_dev |
+| 1 | 4 | 12 | 96.2435% | 80.8050% | 44534 | 17433 | dt_id_dev,hd_dev |
+| 1 | 5 | 17 | 97.9135% | 88.1461% | 14525 | 19894 | dt_id_dev,hd_dev |
+| 1 | 8 | 71 | 98.3019% | 90.7893% | 18204 | 9808 | dt_id_dev,hd_dev |
+| 3 | 8 | 202 | 98.3036% | 90.8051% | 18294 | 9689 | dt_id_dev,hd_dev |
+| 3 | 8 | 208 | 98.3037% | 90.8054% | 18293 | 9689 | dt_id_dev,hd_dev |
+
 ## dataset: `stealth`
 
 ### feature set `timing` — no identity features, payload-content features included

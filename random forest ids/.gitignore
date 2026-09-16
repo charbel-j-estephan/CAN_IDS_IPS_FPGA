@@ -18,3 +18,5 @@ __pycache__/
 results/smoke/
 rtl/smoke/
 results/rerun.done
+data/*.txt
+results/*/done
