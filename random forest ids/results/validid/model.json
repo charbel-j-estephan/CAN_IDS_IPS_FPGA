@@ -1,0 +1,298 @@
+{
+ "feature_set": "timing",
+ "feature_names": [
+  "dt_id",
+  "dt_id_dev",
+  "dt_ratio_q6",
+  "hd",
+  "hd_dev",
+  "dt_bus",
+  "burst",
+  "dlc",
+  "pl_violation",
+  "pl_popcount"
+ ],
+ "feature_widths": [
+  20,
+  20,
+  12,
+  7,
+  7,
+  16,
+  4,
+  4,
+  7,
+  7
+ ],
+ "n_trees": 3,
+ "trees": [
+  {
+   "feature": [
+    9,
+    0,
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    0,
+    24085,
+    0,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    2,
+    0,
+    0,
+    0
+   ],
+   "right": [
+    4,
+    3,
+    0,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    0,
+    1,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1,
+    0,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "hd",
+    "hd_dev",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "pl_violation",
+    "pl_popcount"
+   ]
+  },
+  {
+   "feature": [
+    9,
+    7,
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    0,
+    5,
+    0,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    2,
+    0,
+    0,
+    0
+   ],
+   "right": [
+    4,
+    3,
+    0,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    0,
+    1,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "hd",
+    "hd_dev",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "pl_violation",
+    "pl_popcount"
+   ]
+  },
+  {
+   "feature": [
+    6,
+    9,
+    2,
+    0,
+    0,
+    0,
+    3,
+    9,
+    0,
+    0,
+    4,
+    0,
+    1,
+    0,
+    8,
+    0,
+    0
+   ],
+   "threshold": [
+    0,
+    0,
+    52,
+    0,
+    0,
+    0,
+    0,
+    5,
+    0,
+    0,
+    11,
+    0,
+    9829,
+    0,
+    3,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    2,
+    3,
+    0,
+    0,
+    0,
+    7,
+    8,
+    0,
+    0,
+    11,
+    0,
+    13,
+    0,
+    15,
+    0,
+    0
+   ],
+   "right": [
+    6,
+    5,
+    4,
+    0,
+    0,
+    0,
+    10,
+    9,
+    0,
+    0,
+    12,
+    0,
+    14,
+    0,
+    16,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0,
+    1,
+    0,
+    1,
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "hd",
+    "hd_dev",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "pl_violation",
+    "pl_popcount"
+   ]
+  }
+ ],
+ "cost": {
+  "internal_nodes": 12,
+  "leaves": 15,
+  "max_depth": 5,
+  "features_used": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   6,
+   7,
+   8,
+   9
+  ],
+  "n_features_used": 9
+ },
+ "test_metrics": {
+  "accuracy": 0.9999992838297348,
+  "precision": 1.0,
+  "recall": 0.9999944559329833,
+  "f1": 0.9999972279588075,
+  "fpr": 0.0,
+  "tp": 180372,
+  "tn": 1215943,
+  "fp": 0,
+  "fn": 1
+ }
+}

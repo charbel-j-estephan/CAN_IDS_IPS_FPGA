@@ -1,0 +1,19 @@
+# Generated traces. Large, and reproducible with src/make_trace.py.
+data/*.csv
+
+# Feature caches and raw frame dumps, reproducible with src/prepare.py.
+results/*/cache.npz
+results/*/raw_test.npz
+results/cache.npz
+
+# Simulation vectors, reproducible with src/export_verilog.py.
+rtl/*/vectors.txt
+rtl/*/top_vectors.txt
+*.vvp
+
+__pycache__/
+*.pyc
+
+# smoke-test scratch output
+results/smoke/
+rtl/smoke/
