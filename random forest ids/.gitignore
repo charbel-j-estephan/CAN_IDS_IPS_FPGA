@@ -17,3 +17,4 @@ __pycache__/
 # smoke-test scratch output
 results/smoke/
 rtl/smoke/
+results/rerun.done

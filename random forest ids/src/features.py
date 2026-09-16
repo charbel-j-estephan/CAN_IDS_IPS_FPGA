@@ -35,6 +35,20 @@ FEATURES
                  Costs one 64-bit XOR, one AND and a popcount in hardware.
  11 pl_popcount  population count of the raw payload. Degenerate payloads (all
                  zeros, as the real DoS capture injects) sit at one extreme.
+ 12 id_rate      leaky bucket per ID, in the same 1/64 units as dt_ratio_q6.
+                 Each frame of an ID adds 64 and drains dt_ratio_q6, so an ID
+                 running at its nominal period sits still at 64 while one being
+                 flooded climbs fast. Costs one subtract, one add and 12 bits of
+                 state per ID, and reuses the reciprocal multiply already in the
+                 datapath.
+ 13 bus_rate     the same bucket for the bus as a whole, against the nominal
+                 frame interval learned from clean traffic. One register.
+
+The two rate features exist because during a sustained flood of one ID, every
+frame carrying that ID arrives at the flood period, injected or not. dt_id
+therefore separates nothing for the victim ID. A bucket integrates over many
+frames, so it still reports that the ID's stream is running far over rate even
+when no single inter-arrival time says so.
 
 The last two exist because timing and Hamming distance alone cannot separate a
 flood that reuses a legitimate ID. Once an attacker floods your ID, your own
@@ -54,11 +68,21 @@ CAP_RATIO = (1 << 12) - 1   # 64x the nominal period
 CAP_BURST = 15
 RECIP_SHIFT = 16
 MIN_INVARIANT_SAMPLES = 500
+CAP_RATE = (1 << 12) - 1
+# Exponentially weighted rate estimate. Each frame adds RATE_INC and leaks a
+# fraction of the bucket's own contents scaled by elapsed time, which gives the
+# fixed point b = 4096 / dt_ratio_q6. An ID at its nominal period therefore
+# settles at 64 and one being flooded 64x over rate saturates. A leak that did
+# not depend on the bucket contents would have no restoring force at all and
+# would random-walk to saturation on perfectly normal traffic.
+RATE_SHIFT = 8
+RATE_INC = 16
+RATE_INIT = 64
 
 FEATURE_NAMES = [
     "dt_id", "dt_id_dev", "dt_ratio_q6", "hd", "hd_dev",
     "dt_bus", "burst", "id_known", "can_id", "dlc",
-    "pl_violation", "pl_popcount",
+    "pl_violation", "pl_popcount", "id_rate", "bus_rate",
 ]
 
 # Feature subsets worth comparing. "timing" carries no identity information at
@@ -68,10 +92,15 @@ FEATURE_SETS = {
     # no identity information at all, so it still works when a flood reuses a
     # legitimate ID. This is the set to deploy.
     "timing": ["dt_id", "dt_id_dev", "dt_ratio_q6", "hd", "hd_dev",
-               "dt_bus", "burst", "dlc", "pl_violation", "pl_popcount"],
+               "dt_bus", "burst", "dlc", "pl_violation", "pl_popcount",
+               "id_rate", "bus_rate"],
     # timing and Hamming only, kept to show what the payload features buy
     "timing_only": ["dt_id", "dt_id_dev", "dt_ratio_q6", "hd", "hd_dev",
-                    "dt_bus", "burst", "dlc"],
+                    "dt_bus", "burst", "dlc", "id_rate", "bus_rate"],
+    # what the model could do before the rate buckets were added, kept so the
+    # gain from them is measurable rather than asserted
+    "no_rate": ["dt_id", "dt_id_dev", "dt_ratio_q6", "hd", "hd_dev",
+                "dt_bus", "burst", "dlc", "pl_violation", "pl_popcount"],
     # the two features the reference paper uses
     "paper": ["dt_id_dev", "hd_dev"],
 }
@@ -90,12 +119,15 @@ class Baseline:
 
     def __init__(self, mean_interval: dict, mean_hamming: dict,
                  const_mask: dict | None = None,
-                 const_val: dict | None = None):
+                 const_val: dict | None = None,
+                 bus_interval_us: int = 0):
         self.mean_interval = mean_interval
         self.mean_hamming = mean_hamming
         # payload bits that never move in clean traffic, and their value
         self.const_mask = const_mask or {}
         self.const_val = const_val or {}
+        # nominal gap between frames on the bus, for the global rate bucket
+        self.bus_interval_us = bus_interval_us
 
     @property
     def known_ids(self) -> set:
@@ -158,7 +190,7 @@ def fit_baseline(df: pd.DataFrame) -> Baseline:
     passed in, so nothing from the test truncation can leak in.
     """
     clean = df[df["label"] == 0]
-    _, can_id, dt_id, hd, _, _ = _raw_state(clean)
+    _, can_id, dt_id, hd, dt_bus_clean, _ = _raw_state(clean)
     payload_clean = clean["payload"].to_numpy().astype(np.uint64)
 
     mean_interval, mean_hamming = {}, {}
@@ -191,7 +223,51 @@ def fit_baseline(df: pd.DataFrame) -> Baseline:
             if len(pl) >= MIN_INVARIANT_SAMPLES:
                 const_mask[int(cid)] = int(ones | zeros)
                 const_val[int(cid)] = int(ones)
-    return Baseline(mean_interval, mean_hamming, const_mask, const_val)
+    valid_bus = dt_bus_clean[dt_bus_clean < CAP_BUS]
+    bus_interval = max(1, int(round(float(np.median(valid_bus))))) if len(
+        valid_bus) else 1
+    return Baseline(mean_interval, mean_hamming, const_mask, const_val,
+                    bus_interval)
+
+
+def _rate_buckets(can_id, dt_ratio, bus_ratio):
+    """Leaky-bucket rate estimators, per ID and for the bus as a whole.
+
+    Per frame:   leak = min(b, (b * ratio) >> RATE_SHIFT)
+                 b    = min(CAP_RATE, b - leak + RATE_INC)
+
+    A genuine recurrence with clamping, so it cannot be vectorised. It is one
+    small multiply, one subtract and one add per frame, which is exactly what
+    the RTL does.
+    """
+    n = len(can_id)
+    id_rate = np.empty(n, dtype=np.int32)
+    bus_rate = np.empty(n, dtype=np.int32)
+    buckets = {}
+    bus = RATE_INIT
+    cid_l = can_id.tolist()
+    dtr_l = dt_ratio.tolist()
+    busr_l = bus_ratio.tolist()
+    for i in range(n):
+        cid = cid_l[i]
+        b = buckets.get(cid, RATE_INIT)
+        leak = (b * dtr_l[i]) >> RATE_SHIFT
+        if leak > b:
+            leak = b
+        b = b - leak + RATE_INC
+        if b > CAP_RATE:
+            b = CAP_RATE
+        buckets[cid] = b
+        id_rate[i] = b
+
+        leak = (bus * busr_l[i]) >> RATE_SHIFT
+        if leak > bus:
+            leak = bus
+        bus = bus - leak + RATE_INC
+        if bus > CAP_RATE:
+            bus = CAP_RATE
+        bus_rate[i] = bus
+    return id_rate, bus_rate
 
 
 def extract(df: pd.DataFrame, baseline: Baseline) -> pd.DataFrame:
@@ -216,6 +292,11 @@ def extract(df: pd.DataFrame, baseline: Baseline) -> pd.DataFrame:
     pl_violation = popcount64((payload ^ cval) & cmask)
     pl_popcount = popcount64(payload)
 
+    bus_recip = (int(round((1 << RECIP_SHIFT) * 64.0 / baseline.bus_interval_us))
+                 if baseline.bus_interval_us > 0 else 0)
+    bus_ratio = np.clip((dt_bus * bus_recip) >> RECIP_SHIFT, 0, CAP_RATIO)
+    id_rate, bus_rate = _rate_buckets(can_id, dt_ratio, bus_ratio)
+
     out = pd.DataFrame(
         {
             "dt_id": dt_id.astype(np.int32),
@@ -230,6 +311,8 @@ def extract(df: pd.DataFrame, baseline: Baseline) -> pd.DataFrame:
             "dlc": df["dlc"].to_numpy().astype(np.int8),
             "pl_violation": pl_violation.astype(np.int16),
             "pl_popcount": pl_popcount.astype(np.int16),
+            "id_rate": id_rate.astype(np.int32),
+            "bus_rate": bus_rate.astype(np.int32),
         }
     )
     return out

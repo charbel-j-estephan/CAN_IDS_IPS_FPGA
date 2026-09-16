@@ -31,7 +31,8 @@ python3 src/select_model.py --cache "$OUT/cache.npz" --sweep "$OUT/sweep.csv" \
 echo "== 4/6  verilog"
 python3 src/export_rom.py --baseline "$OUT/baseline.json" --rtl-dir "$RTL"
 python3 src/export_verilog.py --model "$OUT/model.json" --cache "$OUT/cache.npz" \
-    --rtl-dir "$RTL" --raw-cache "$OUT/raw_test.npz"
+    --rtl-dir "$RTL" --raw-cache "$OUT/raw_test.npz" \
+    --baseline "$OUT/baseline.json"
 cp rtl/can_ids_features.v rtl/can_ids_top.v "$RTL/"
 
 echo "== 5/6  simulate"

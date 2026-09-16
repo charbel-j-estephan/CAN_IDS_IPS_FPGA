@@ -64,6 +64,8 @@ BRAM indexed by the 11-bit CAN ID.
 | 9 | `dlc` | data length code |
 | 10 | `pl_violation` | payload bits that break this ID's learned invariant |
 | 11 | `pl_popcount` | population count of the raw payload |
+| 12 | `id_rate` | leaky-bucket rate estimate for this ID |
+| 13 | `bus_rate` | the same estimate for the bus as a whole |
 
 Three of these are worth explaining.
 
@@ -80,15 +82,45 @@ XOR, one AND and a popcount. A bit only counts as invariant with at least 500
 clean samples behind it, otherwise a short training window invents invariants
 that do not hold and the false positive rate goes up.
 
+**`id_rate`** is an exponentially weighted rate estimate. Each frame of an ID
+adds a fixed credit and leaks a fraction of the bucket's own contents scaled by
+elapsed time, giving the fixed point `b = 4096 / dt_ratio_q6`. An ID running at
+its nominal period settles at 64; one flooded 64x over rate saturates. It needs
+one small multiply, one subtract, one add and 12 bits of state per ID.
+
+This one matters more than it looks. During a sustained flood of one ID, every
+frame carrying that ID arrives at the flood period, injected or not, so `dt_id`
+separates nothing at all for the victim ID. A bucket integrates over many frames
+and still reports that the stream is running far over rate when no single
+inter-arrival time does. Note the leak has to be proportional to the bucket's own
+contents: a fixed drain has no restoring force and random-walks to saturation on
+perfectly normal traffic, which is exactly what the first version of this feature
+did before it was measured.
+
 **Feature sets.** `full` includes `can_id` and `id_known`. `timing` drops both,
 so the model carries no identity information and still works when a flood reuses
-a legitimate ID. `timing_only` additionally drops the payload-content features.
-`paper` is the reference design's two features, kept as a control.
+a legitimate ID. `timing_only` additionally drops the payload-content features,
+and `no_rate` drops the two rate buckets, so the gain from each group is
+measurable rather than asserted. `paper` is the reference design's two features,
+kept as a control.
+
+## Scoring matches the hardware voter
+
+`RandomForestClassifier.predict` averages per-tree class *probabilities* and then
+takes an argmax. The voter in the RTL cannot do that: it sees one bit per tree
+and counts. The two agree on shallow, cleanly separated trees and diverge once
+leaves are mixed.
+
+Scoring the sweep with sklearn's own `predict` therefore reports an accuracy the
+hardware does not achieve. Everything here is scored with a hard majority vote
+instead. This was not caught by reading the code, it was caught by the assertion
+in `select_model.py` that the exported integer tables must reproduce the trained
+model exactly: on a 9-tree depth-8 forest it reported 1064 mismatches.
 
 ## Results
 
-Measured on the held-out test truncation. `nodes` counts internal comparator
-nodes summed over the forest, which is what the FPGA pays for in area.
+Measured on the held-out test truncation, scored with the hardware majority
+voter. `nodes` counts internal comparator nodes summed over the forest.
 
 ### The classic DoS case: flooding CAN ID `0x000`
 
@@ -100,59 +132,74 @@ whitelist comparator is a legitimate and very cheap DoS defence, but it is not a
 random forest and it stops working the moment the flooded ID is a valid one.
 
 For contrast, the reference paper's two features on the same data reach
-**98.87 %** with 26 nodes, against the 98.2 % the paper reports. That agreement
-is the sanity check that this pipeline is measuring the same thing the paper did.
+**99.01 %**, against the 98.2 % the paper reports. That agreement is the sanity
+check that this pipeline measures the same thing the paper did.
 
-### Flooding a legitimate ID (`0x316`)
+### Flooding a legitimate ID
 
-This removes the whitelist shortcut, so it is the case that actually exercises
-the forest.
+This removes the whitelist shortcut. The `timing` set reaches 100 % with a single
+comparator on `pl_violation`, because the injected payloads are all zeros and so
+break the victim ID's learned payload invariant on every frame.
 
-| feature set | best accuracy | nodes at best |
-|---|---|---|
-| `timing` | **100.0000 %** | 1 |
-| `timing_only` | 99.4629 % | 129 |
-| `paper` | 99.2313 % | 111 |
+That is real, but it depends on the attacker being lazy. Which leads to the case
+that actually decides the design.
 
-Without payload-content features the model plateaus at 99.46 % with 129 nodes.
-The failure mode is specific and worth stating: 4686 of 5553 false positives
-were the victim ID's own legitimate frames. Once an attacker floods your ID,
-your real frames' inter-arrival times are corrupted too, so the injected frames
-and the victim's frames become indistinguishable on every timing feature. Adding
-`pl_violation` removes that failure entirely.
-
-**Selected model** (`--policy robust`, target 99.99 %):
-
-```
-3 trees, 12 comparator nodes, depth 5, splits on 9 features
-accuracy   99.999928 %
-precision  100.000000 %   (0 false alarms in 1 396 316 frames)
-recall      99.999446 %   (1 missed attack)
-```
-
-The smallest model that also scores 100 % is a single comparator on
-`pl_violation`. The selector does not choose it. One feature carrying the whole
-verdict means an attacker who defeats that one feature defeats the IDS outright,
-and a single tree has no vote to lose. Twelve comparators instead of one is a
-rounding error in area and buys graceful degradation. Use `--policy smallest` to
-override.
-
-### Worst case: a flood that replays structurally valid payloads
+### Worst case: a flood replaying structurally valid payloads
 
 `make_trace.py --stealth` injects payloads that are valid for the flooded ID, so
 `hd`, `pl_popcount` and `pl_violation` all go blind and only timing is left.
 
-| nodes | accuracy |
-|---|---|
-| 3 | 99.2651 % |
-| 15 | 99.3452 % |
-| 29 | 99.4665 % |
-| 1147 | 99.5641 % |
+| trees | nodes | accuracy | recall | FP | FN |
+|---|---|---|---|---|---|
+| 1 | 3 | 99.5835 % | 99.9828 % | 5785 | 31 |
+| 3 | 9 | 99.5851 % | 99.9823 % | 5761 | 32 |
+| 1 | 12 | 99.7479 % | 99.2804 % | 2222 | 1298 |
+| 3 | 20 | 99.6057 % | 99.9834 % | 5476 | 30 |
+| 9 | 277 | 99.7660 % | — | 2309 | 958 |
 
-**This is the argument for small trees.** Going from 3 comparators to 1147 buys
-0.30 percentage points. The accuracy ceiling against an adaptive attacker is set
-by the features, not by forest size, so spending area on more trees is close to
-worthless. Everything useful happens below about 30 nodes.
+Two things to read off this.
+
+**The rate buckets moved the ceiling.** Without them the best achievable is
+99.5311 %; with them it is 99.7660 %. More to the point, **3 comparators with the
+rate feature beat 156 comparators without it.**
+
+**Accuracy is the wrong headline.** The 12-node row scores higher than the
+20-node row but misses 1298 attacks instead of 30. For an IDS that feeds a node
+exclusion system, a missed attack costs more than a false alarm, so the shipped
+model is picked on recall, not accuracy.
+
+### Selected model
+
+3 trees, 20 comparator nodes, depth 3, splitting on 9 features:
+
+```
+accuracy   99.6057 %
+recall     99.9834 %   (30 missed attacks out of 180 373)
+precision  97.0530 %   (5476 false alarms out of 1 215 943 normal frames)
+```
+
+`--max-nodes` caps the search, because the robust policy maximises feature
+spread and will otherwise happily return a 187-node forest for 0.13 more points.
+
+### Does one burned model cover every attack style?
+
+The FPGA gets one forest and one set of baseline ROM contents. If the attacker
+switches tactics, that same burned model has to cope. `cross_eval.py` scores the
+model trained on the stealth trace against all three, using the stealth baseline
+throughout, because the baseline is ROM:
+
+| trace | accuracy | recall | FP | FN |
+|---|---|---|---|---|
+| `0x000` flood | 99.9981 % | 100.0000 % | 27 | 0 |
+| valid-ID flood | 99.6057 % | 99.9834 % | 5476 | 30 |
+| stealth flood | 99.6057 % | 99.9834 % | 5476 | 30 |
+
+Training on the hardest case covers the easier ones. The bottom two rows are
+identical, which is not a copy-paste: the two traces differ on exactly the
+180 373 injected frames, and `pl_popcount` differs on every one of them, yet the
+verdicts come out bit-identical. The model's decision rides entirely on timing
+and rate, so it is not leaning on the attacker using degenerate payloads. That
+was verified element by element, not inferred from the totals matching.
 
 ## Hardware
 
@@ -196,8 +243,13 @@ Last run, on the selected 3-tree 12-comparator model:
 ```
 tb_rf_forest     checked 300000 vectors, 0 mismatches   PASS
 tb_can_ids_top   checked 200000 frames,  0 mismatches   PASS
-integer tables vs sklearn: 0 mismatches on train, 0 on test
+integer tables vs sklearn trees: 0 mismatches on train, 0 on test
 ```
+
+The end-to-end testbench matters most now that the feature extractor holds a
+stateful leaky-bucket recurrence per ID. A rate bucket that drifts by one count
+between the model and the RTL would silently change verdicts, so it is checked
+frame by frame rather than spot-checked.
 
 `run_all.sh` refuses to continue if either truncation ends up with no attack
 frames or no normal frames. A short capture whose attack bursts all land in one
@@ -217,6 +269,7 @@ src/export_rom.py      per-ID baseline ROM contents
 src/export_verilog.py  generate the forest RTL and both testbenches
 src/hw_report.py       area, latency and throughput budget
 src/report.py          markdown report of every sweep
+src/cross_eval.py      score one frozen model against other attack styles
 rtl/can_ids_features.v feature extractor
 rtl/can_ids_top.v      top level
 run_all.sh             CSV in, verified Verilog out
@@ -236,3 +289,9 @@ run_all.sh             CSV in, verified Verilog out
 * Only DoS-style flooding is modelled. Fuzzy and spoofing captures from the same
   dataset family will load and run through this flow unchanged, but nothing here
   has been tuned for them.
+* The residual false alarms are almost entirely the flooded ID's own legitimate
+  frames. During a sustained flood those frames are genuinely ambiguous at the
+  per-frame level, since they arrive at the flood period like everything else
+  carrying that ID. Driving that number down further needs a verdict at the
+  (ID, time window) level rather than per frame, which is what a node exclusion
+  system wants anyway.

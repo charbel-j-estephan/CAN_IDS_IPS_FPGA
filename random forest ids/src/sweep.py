@@ -29,6 +29,21 @@ CLK_MHZ = 100.0
 PIPELINE_OVERHEAD = 4     # BRAM read, feature compute, vote, register out
 
 
+def majority_predict(clf, X) -> np.ndarray:
+    """Hard majority vote over the trees, which is what the hardware does.
+
+    RandomForestClassifier.predict averages per-tree class *probabilities* and
+    then takes the argmax. The voter in the RTL cannot do that: it sees one bit
+    per tree and counts. The two agree on shallow, cleanly separated trees and
+    diverge once leaves are mixed, so scoring with sklearn's own predict would
+    report an accuracy the hardware does not actually achieve.
+    """
+    votes = np.zeros(len(X), dtype=np.int32)
+    for est in clf.estimators_:
+        votes += est.predict(X).astype(np.int32)
+    return (votes * 2 > len(clf.estimators_)).astype(np.int8)
+
+
 def forest_cost(clf) -> dict:
     internal = 0
     leaves = 0
@@ -104,8 +119,8 @@ def main() -> None:
             )
             clf.fit(Xtr, ytr)
             cost = forest_cost(clf)
-            m_te = score(yte, clf.predict(Xte))
-            m_tr = score(ytr, clf.predict(Xtr))
+            m_te = score(yte, majority_predict(clf, Xte))
+            m_tr = score(ytr, majority_predict(clf, Xtr))
             cycles = cost["max_depth"] + PIPELINE_OVERHEAD
             rows.append(
                 {

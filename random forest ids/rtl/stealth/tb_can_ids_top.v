@@ -23,7 +23,7 @@ module tb_can_ids_top;
     integer checked = 0;
     integer mismatches = 0;
 
-    can_ids_top dut (
+    can_ids_top #(.BUS_RECIP(16'd16009)) dut (
         .clk(clk), .rst_n(rst_n),
         .frame_valid(frame_valid), .can_id(can_id), .dlc(dlc),
         .payload(payload), .ts_us(ts_us), .busy(busy),

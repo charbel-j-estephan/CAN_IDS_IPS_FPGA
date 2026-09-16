@@ -217,6 +217,8 @@ def main() -> None:
                     help="npz holding the raw test frames, enabling the "
                          "end-to-end can_ids_top testbench")
     ap.add_argument("--max-top-vectors", type=int, default=200000)
+    ap.add_argument("--baseline", default="",
+                    help="baseline.json, needed for the bus rate constant")
     args = ap.parse_args()
 
     with open(args.model) as fh:
@@ -261,7 +263,14 @@ def main() -> None:
         k = min(args.max_top_vectors, len(r_id))
         top_tb = os.path.join(args.rtl_dir, "tb_can_ids_top.v")
         with open(top_tb, "w") as fh:
-            fh.write(emit_top_tb(k))
+            bus_recip = 0
+            if args.baseline:
+                with open(args.baseline) as bf:
+                    bl = json.load(bf)
+                bi = int(bl.get("bus_interval_us", 0))
+                if bi > 0:
+                    bus_recip = min(int(round((1 << 16) * 64.0 / bi)), 0xFFFF)
+            fh.write(emit_top_tb(k, bus_recip))
         top_vec = os.path.join(args.rtl_dir, "top_vectors.txt")
         with open(top_vec, "w") as fh:
             fh.write("".join(
@@ -308,7 +317,7 @@ module tb_can_ids_top;
     integer checked = 0;
     integer mismatches = 0;
 
-    can_ids_top dut (
+    can_ids_top #(.BUS_RECIP(16'dBUS_RECIP_VALUE)) dut (
         .clk(clk), .rst_n(rst_n),
         .frame_valid(frame_valid), .can_id(can_id), .dlc(dlc),
         .payload(payload), .ts_us(ts_us), .busy(busy),
@@ -368,8 +377,10 @@ endmodule
 """
 
 
-def emit_top_tb(n_vectors: int) -> str:
-    return TOP_TB.replace("N_VECTORS", str(n_vectors))
+def emit_top_tb(n_vectors: int, bus_recip: int) -> str:
+    return (TOP_TB
+            .replace("N_VECTORS", str(n_vectors))
+            .replace("BUS_RECIP_VALUE", str(bus_recip)))
 
 if __name__ == "__main__":
     main()

@@ -34,13 +34,13 @@ from sklearn.ensemble import RandomForestClassifier
 
 sys.path.insert(0, os.path.dirname(__file__))
 from features import FEATURE_SETS                          # noqa: E402
-from sweep import forest_cost, score                       # noqa: E402
+from sweep import forest_cost, majority_predict, score      # noqa: E402
 
 # Bit widths the RTL uses for each feature, matching features.py saturation.
 FEATURE_WIDTH = {
     "dt_id": 20, "dt_id_dev": 20, "dt_ratio_q6": 12, "hd": 7, "hd_dev": 7,
     "dt_bus": 16, "burst": 4, "id_known": 1, "can_id": 11, "dlc": 4,
-    "pl_violation": 7, "pl_popcount": 7,
+    "pl_violation": 7, "pl_popcount": 7, "id_rate": 12, "bus_rate": 12,
 }
 
 
@@ -103,6 +103,10 @@ def main() -> None:
     ap.add_argument("--target", type=float, default=0.999)
     ap.add_argument("--policy", default="robust",
                     choices=["robust", "smallest"])
+    ap.add_argument("--max-nodes", type=int, default=0,
+                    help="hard cap on total comparator nodes. The robust "
+                         "policy maximises feature spread, which will happily "
+                         "pick a large forest; this keeps it in budget.")
     ap.add_argument(
         "--feature-set", default="timing",
         help="timing excludes can_id and id_known, so the model cannot fall "
@@ -131,6 +135,17 @@ def main() -> None:
             f"no {args.feature_set} configuration reaches {args.target:.4%}; "
             f"best was {best_acc:.4%}. Lower --target or add features."
         )
+    if args.max_nodes:
+        capped = cand[cand.internal_nodes <= args.max_nodes]
+        if capped.empty:
+            smallest = int(cand.internal_nodes.min())
+            raise SystemExit(
+                f"no configuration meets {args.target:.4%} within "
+                f"{args.max_nodes} nodes; the smallest that does needs "
+                f"{smallest}. Raise --max-nodes or lower --target."
+            )
+        cand = capped
+
     if args.policy == "smallest":
         pick = cand.sort_values(
             ["internal_nodes", "max_depth", "n_trees"]
@@ -167,12 +182,15 @@ def main() -> None:
         "cost": forest_cost(clf),
     }
 
-    # the integer tables must reproduce sklearn exactly, on both truncations
+    # The integer tables must reproduce sklearn's trees exactly on both
+    # truncations. The comparison is against the hard majority vote, not
+    # clf.predict, because the voter in the RTL counts one bit per tree.
     for name, X in (("train", Xtr), ("test", Xte)):
-        a = clf.predict(X).astype(np.int8)
+        a = majority_predict(clf, X)
         b = predict_tables(model, X)
         mismatch = int((a != b).sum())
-        print(f"integer tables vs sklearn on {name}: {mismatch} mismatches")
+        print(f"integer tables vs sklearn trees on {name}: "
+              f"{mismatch} mismatches")
         assert mismatch == 0, "integer threshold conversion is not exact"
 
     m = score(yte, predict_tables(model, Xte))

@@ -21,6 +21,8 @@ module tb_rf_forest;
     reg [3:0] dlc;
     reg [6:0] pl_violation;
     reg [6:0] pl_popcount;
+    reg [11:0] id_rate;
+    reg [11:0] bus_rate;
     reg expected;
 
     wire out_valid;
@@ -44,6 +46,8 @@ module tb_rf_forest;
         .dlc(dlc),
         .pl_violation(pl_violation),
         .pl_popcount(pl_popcount),
+        .id_rate(id_rate),
+        .bus_rate(bus_rate),
         .out_valid(out_valid),
         .attack(attack)
     );
@@ -61,8 +65,8 @@ module tb_rf_forest;
         rst_n = 1;
 
         for (i = 0; i < 300000; i = i + 1) begin
-            code = $fscanf(fd, "%d %d %d %d %d %d %d %d %d %d %d\n", dt_id, dt_id_dev, dt_ratio_q6, hd, hd_dev, dt_bus, burst, dlc, pl_violation, pl_popcount, expected);
-            if (code != 11) begin
+            code = $fscanf(fd, "%d %d %d %d %d %d %d %d %d %d %d %d %d\n", dt_id, dt_id_dev, dt_ratio_q6, hd, hd_dev, dt_bus, burst, dlc, pl_violation, pl_popcount, id_rate, bus_rate, expected);
+            if (code != 13) begin
                 $display("FATAL: short read at vector %0d (code %0d)", i, code);
                 $finish;
             end

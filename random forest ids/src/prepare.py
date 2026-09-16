@@ -102,6 +102,7 @@ def main() -> None:
                                baseline.const_mask.items()},
                 "const_val": {k: f"{v:016x}" for k, v in
                               baseline.const_val.items()},
+                "bus_interval_us": baseline.bus_interval_us,
             },
             fh,
             indent=2,

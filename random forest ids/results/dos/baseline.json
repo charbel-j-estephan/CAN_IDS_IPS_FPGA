@@ -1,4 +1,5 @@
 {
+  "bus_interval_us": 262,
   "const_mask": {
     "160": "f0f000ffffff0000",
     "161": "c000ff03ffffff07",
