@@ -191,6 +191,19 @@ is an integer and `x <= 2.5` is exactly `x <= 2` for integer `x`.
 `select_model.py` asserts that the integer tables reproduce sklearn exactly on
 both truncations rather than assuming it.
 
+Last run, on the selected 3-tree 12-comparator model:
+
+```
+tb_rf_forest     checked 300000 vectors, 0 mismatches   PASS
+tb_can_ids_top   checked 200000 frames,  0 mismatches   PASS
+integer tables vs sklearn: 0 mismatches on train, 0 on test
+```
+
+`run_all.sh` refuses to continue if either truncation ends up with no attack
+frames or no normal frames. A short capture whose attack bursts all land in one
+half will otherwise train a model that predicts "normal" for everything and
+still reports a plausible-looking accuracy.
+
 ## Layout
 
 ```

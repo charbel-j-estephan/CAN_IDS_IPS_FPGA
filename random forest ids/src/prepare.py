@@ -47,6 +47,21 @@ def main() -> None:
     print(f"train truncation {len(tr)} frames, {tr.label.mean() * 100:.2f} % injected")
     print(f"test  truncation {len(te)} frames, {te.label.mean() * 100:.2f} % injected")
 
+    # A truncation with no attacks, or no normal traffic, trains or scores a
+    # model that is meaningless while still reporting a plausible accuracy.
+    # Catch it here rather than letting it through to the sweep.
+    for name, part in (("train", tr), ("test", te)):
+        n_attack = int(part.label.sum())
+        n_normal = int(len(part) - n_attack)
+        if n_attack == 0 or n_normal == 0:
+            raise SystemExit(
+                f"the {name} truncation holds {n_attack} attack and "
+                f"{n_normal} normal frames, so it cannot be used. The attack "
+                f"bursts are not spread across the trace. Use a longer capture, "
+                f"or change TRAIN_SPAN / TEST_SPAN in this file so both "
+                f"truncations straddle attack activity."
+            )
+
     baseline = fit_baseline(tr)
     print(f"baseline learned for {len(baseline.known_ids)} CAN IDs")
 
