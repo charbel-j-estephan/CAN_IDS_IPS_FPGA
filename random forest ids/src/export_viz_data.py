@@ -89,6 +89,28 @@ def main() -> None:
             "feature_names": m["feature_names"],
         }
 
+    WINDOW_LABEL = {
+        "realdos": "real HCRL DoS capture",
+        "zeroid": "real traffic + 0x000 flood",
+        "validid": "real traffic + valid-ID flood",
+        "stealth2c0": "real traffic + stealth on 0x2c0",
+        "stealth316": "real traffic + stealth on 0x316",
+        "syncan": "SynCAN flooding (independent)",
+    }
+    order = []
+    for tag in ["realdos", "zeroid", "validid", "stealth2c0", "stealth316",
+                "syncan"]:
+        f = os.path.join(args.results, f"window_{tag}.json")
+        if not os.path.exists(f):
+            continue
+        with open(f) as fh:
+            rows = json.load(fh)
+        payload.setdefault("windows", {})[tag] = {
+            "label": WINDOW_LABEL[tag], "rows": rows,
+        }
+        order.append(tag)
+    payload["window_order"] = order
+
     for path in sorted(glob.glob(os.path.join(args.results, "cross_eval*.json"))):
         name = os.path.basename(path).replace(".json", "")
         with open(path) as fh:
@@ -101,6 +123,7 @@ def main() -> None:
     print(f"  fronts      {list(payload['fronts'])}")
     print(f"  models      {list(payload['models'])}")
     print(f"  cross_eval  {list(payload['cross_eval'])}")
+    print(f"  windows     {payload.get('window_order', [])}")
 
 
 if __name__ == "__main__":
