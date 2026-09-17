@@ -1,0 +1,78 @@
+{
+ "feature_set": "no_payload",
+ "feature_names": [
+  "dt_id",
+  "dt_id_dev",
+  "dt_ratio_q6",
+  "dt_bus",
+  "burst",
+  "dlc",
+  "id_rate",
+  "bus_rate"
+ ],
+ "n_trees": 1,
+ "trees": [
+  {
+   "feature": [
+    2,
+    0,
+    0
+   ],
+   "threshold": [
+    11,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  }
+ ],
+ "cost": {
+  "internal_nodes": 1,
+  "leaves": 2,
+  "max_depth": 1,
+  "features_used": [
+   2
+  ],
+  "n_features_used": 1
+ },
+ "test_metrics": {
+  "accuracy": 0.9953838077594634,
+  "precision": 0.9747267189586115,
+  "recall": 0.9999571977357602,
+  "f1": 0.9871807738016638,
+  "fpr": 0.0056048391760446905,
+  "tp": 93449,
+  "tn": 429882,
+  "fp": 2423,
+  "fn": 4
+ }
+}

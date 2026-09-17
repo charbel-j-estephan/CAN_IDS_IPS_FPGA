@@ -20,7 +20,18 @@ Three attack modes, in increasing difficulty:
              the whitelist shortcut but leaves the payload degenerate.
   stealth    flood a legitimate ID by replaying that ID's own real payloads,
              sampled from the clean capture. Blinds every payload feature, so
-             only timing and rate are left. This is the honest worst case.
+             only timing and rate are left.
+  lowrate    stealth, but paced at a multiple of the victim's own period
+             instead of every 0.3 ms. --rate 2 doubles the ID's frame rate,
+             which is enough to spoof a gauge while leaving the inter-arrival
+             ratio well inside what normal jitter can look like. This is the
+             honest worst case: a fast flood is loud, and an attacker who only
+             needs their frames acted on has no reason to be loud.
+  mixed      every burst picks its own rate from MIXED_RATES. The attacker's
+             rate is a free parameter, so a model trained at one rate learns a
+             threshold that only covers that rate: one trained on 33x floods
+             misses a 2x flood entirely. Training across the range is what fixes
+             that, and this is the mode to train on.
 """
 
 from __future__ import annotations
@@ -37,9 +48,14 @@ from can_data import load_hcrl_normal_txt                  # noqa: E402
 FRAME_TIME = 0.000262      # 131 bits at 500 kbit/s
 DOS_PERIOD = 0.0003        # documented injection period
 ZERO_ID = 0x000
+# Rates for `mixed`, as multiples of the victim ID's own frame rate. The top of
+# the range is roughly what the documented 0.3 ms DoS achieves against a 10 ms
+# ID; the bottom is a flood quiet enough to pass for jitter.
+MIXED_RATES = (2.0, 4.0, 8.0, 16.0, 33.0)
 
 
-def build(clean, mode: str, attack_id: int, attack_fraction: float, seed: int):
+def build(clean, mode: str, attack_id: int, attack_fraction: float, seed: int,
+          rate: float = 1.0):
     rng = np.random.default_rng(seed)
 
     t = clean["timestamp"].to_numpy(np.float64)
@@ -54,26 +70,58 @@ def build(clean, mode: str, attack_id: int, attack_fraction: float, seed: int):
     else:
         inj_id = attack_id
 
+    # lowrate paces injections off the victim's own period rather than the
+    # documented 0.3 ms, so the flood adds `rate` extra frames per real one
+    period = DOS_PERIOD
+    victim_period = None
+    if mode in ("lowrate", "mixed"):
+        vt = t[can_id == inj_id]
+        if len(vt) < 10:
+            raise SystemExit(f"ID {inj_id:#05x} is not in the capture")
+        victim_period = float(np.median(np.diff(vt)))
+        period = victim_period / max(rate, 1e-6)
+        if mode == "lowrate":
+            print(f"victim period {victim_period * 1000:.2f} ms, "
+                  f"injecting every {period * 1000:.2f} ms "
+                  f"({rate:g}x its rate)")
+        else:
+            print(f"victim period {victim_period * 1000:.2f} ms, bursts at "
+                  + ", ".join(f"{r:g}x" for r in MIXED_RATES))
+
     # how many frames to inject for the requested share
     n_clean = len(t)
     budget = int(n_clean * attack_fraction / (1.0 - attack_fraction))
 
     burst_seconds = rng.uniform(3.0, 5.0, size=4000)
-    per_burst = (burst_seconds / DOS_PERIOD).astype(np.int64)
+    per_burst = (burst_seconds / period).astype(np.int64)
     keep = np.cumsum(per_burst) <= budget
     per_burst = per_burst[keep]
+    burst_seconds = burst_seconds[keep]
     if len(per_burst) == 0:
         raise SystemExit("capture too short for any attack burst")
 
     # never in the first 60 s, so the baseline has clean traffic to learn from
     starts = np.sort(rng.uniform(60.0, max(61.0, duration - 10.0),
                                  size=len(per_burst)))
-    a_times = np.concatenate(
-        [s + np.arange(c) * DOS_PERIOD for s, c in zip(starts, per_burst)]
-    )
+    if mode == "mixed":
+        burst_rates = rng.choice(MIXED_RATES, size=len(per_burst))
+        burst_periods = victim_period / burst_rates
+        # a slow burst spends its frame budget over more time, so cap each
+        # burst's length in frames to keep the bursts comparable in duration
+        per_burst = np.minimum(
+            per_burst, (burst_seconds / burst_periods).astype(np.int64)
+        )
+        a_times = np.concatenate(
+            [st + np.arange(c) * pp
+             for st, c, pp in zip(starts, per_burst, burst_periods) if c > 0]
+        )
+    else:
+        a_times = np.concatenate(
+            [s + np.arange(c) * period for s, c in zip(starts, per_burst)]
+        )
     n_a = len(a_times)
 
-    if mode == "stealth":
+    if mode in ("stealth", "lowrate", "mixed"):
         # replay the victim ID's own real payloads, so the injected frames are
         # structurally indistinguishable from that ID's genuine traffic
         victim = payload[can_id == inj_id]
@@ -129,7 +177,11 @@ def main() -> None:
     ap.add_argument("--clean", required=True, help="normal_run_data.txt")
     ap.add_argument("--out", required=True)
     ap.add_argument("--mode", required=True,
-                    choices=["zero-id", "valid-id", "stealth"])
+                    choices=["zero-id", "valid-id", "stealth", "lowrate",
+                             "mixed"])
+    ap.add_argument("--rate", type=float, default=2.0,
+                    help="for lowrate: extra frames injected per real frame "
+                         "of the victim ID")
     ap.add_argument("--attack-id", default="",
                     help="hex ID to flood; defaults to the highest-rate ID in "
                          "the clean capture")
@@ -152,7 +204,8 @@ def main() -> None:
     print(f"mode {args.mode}, flooding ID {injected_id:#05x}")
 
     t, can_id, dlc, payload, label = build(
-        clean, args.mode, attack_id, args.attack_fraction, args.seed
+        clean, args.mode, attack_id, args.attack_fraction, args.seed,
+        rate=args.rate,
     )
     write_csv(args.out, t, can_id, dlc, payload, label)
     print(f"frames    {len(t)}")

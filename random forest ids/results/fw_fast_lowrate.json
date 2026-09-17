@@ -1,0 +1,29 @@
+[
+ {
+  "m": 2,
+  "windows": 7,
+  "detected": 0,
+  "median_ms": NaN,
+  "worst_ms": NaN,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 4,
+  "windows": 7,
+  "detected": 0,
+  "median_ms": NaN,
+  "worst_ms": NaN,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 8,
+  "windows": 7,
+  "detected": 0,
+  "median_ms": NaN,
+  "worst_ms": NaN,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ }
+]

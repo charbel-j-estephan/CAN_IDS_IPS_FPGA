@@ -1,0 +1,303 @@
+[
+ {
+  "rate": 7.63578449217328,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.8187789916992188
+ },
+ {
+  "rate": 19.085987261146496,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 2.7096521854400635
+ },
+ {
+  "rate": 5.068076109936575,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 4.600872993469238
+ },
+ {
+  "rate": 4.000667556742323,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.515287160873413
+ },
+ {
+  "rate": 38.03354487760653,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.2987220287322998
+ },
+ {
+  "rate": 3.9995233101344265,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 2.223151206970215
+ },
+ {
+  "rate": 2.000047675804529,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 3.98051381111145
+ },
+ {
+  "rate": 16.005723006486075,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.5874319076538086
+ },
+ {
+  "rate": 4.001049117787315,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 4.096826076507568
+ },
+ {
+  "rate": 19.085987261146496,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.7752070426940918
+ },
+ {
+  "rate": 12.723991507430998,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 5.956686973571777
+ },
+ {
+  "rate": 4.000667556742323,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.5352909564971924
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.26042795181274414
+ },
+ {
+  "rate": 15.999618611746758,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.47579002380371094
+ },
+ {
+  "rate": 16.7804,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.4353139400482178
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.3893320560455322
+ },
+ {
+  "rate": 19.085987261146496,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.2703361511230469
+ },
+ {
+  "rate": 9.336968617849989,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 4.316112041473389
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.40347981452941895
+ },
+ {
+  "rate": 33.00629425649095,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.2750279903411865
+ },
+ {
+  "rate": 8.001335113484647,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.0617730617523193
+ },
+ {
+  "rate": 3.825551705270837,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.6402168273925781
+ },
+ {
+  "rate": 4.000667556742323,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.9405581951141357
+ },
+ {
+  "rate": 12.727851941747574,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 4.573851823806763
+ },
+ {
+  "rate": 12.723991507430998,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 5.3107500076293945
+ },
+ {
+  "rate": 7.995235372593863,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.9273309707641602
+ },
+ {
+  "rate": 1.9999523264683448,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 3.115591049194336
+ },
+ {
+  "rate": 9.545164960182024,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 4.731229066848755
+ },
+ {
+  "rate": 3.9409112259276657,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.9958539009094238
+ },
+ {
+  "rate": 19.09467455621302,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.2627298831939697
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.0655310153961182
+ },
+ {
+  "rate": 18.628330373001777,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.4031639099121094
+ },
+ {
+  "rate": 3.9991420400381315,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 2.0505309104919434
+ },
+ {
+  "rate": 12.723991507430998,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 5.471069097518921
+ },
+ {
+  "rate": 19.09467455621302,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.8559060096740723
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 1.1773829460144043
+ },
+ {
+  "rate": 38.03354487760653,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.34281492233276367
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.41164302825927734
+ },
+ {
+  "rate": 19.09467455621302,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.4009830951690674
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.3673238754272461
+ },
+ {
+  "rate": 16.005723006486075,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 0.39047884941101074
+ },
+ {
+  "rate": 7.765827471306923,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 2.504073143005371
+ },
+ {
+  "rate": 1.9999523264683448,
+  "detected": false,
+  "latency_ms": NaN,
+  "victim": 790,
+  "seconds": 3.280524969100952
+ }
+]

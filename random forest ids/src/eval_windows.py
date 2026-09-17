@@ -26,6 +26,14 @@ rather than newly detected. That version reported 1 of 73 windows detected on a
 trace where the model was perfect frame by frame, which is how the bug was
 found. An ID that has been quiet longer than CLEAR_SILENT_S is cleared outright
 for the same reason.
+
+The metric has the same trap. Asking "did an alarm *start* inside this window"
+undercounts: a fast burst saturates the score, which then takes over a second to
+decay, and a window opening inside that shadow records no new start even though
+the ID was alarming throughout it. That scored fast floods as *less* detected
+than slow ones, which is backwards and is how it was caught. What is measured is
+whether the alarm was *active* during the window, which is also the question an
+operator is actually asking.
 """
 
 from __future__ import annotations
@@ -63,28 +71,29 @@ def attack_windows(t: np.ndarray, y: np.ndarray):
     return [(float(at[s]), float(at[e])) for s, e in zip(starts, ends)]
 
 
-def alarms(t, can_id, pred, m: float):
-    """Per-ID leaky integrator. Returns the times at which an alarm starts.
+def alarm_intervals(t, can_id, pred, m: float):
+    """Per-ID leaky integrator. Returns (start, end, id) alarming intervals.
 
     score bleeds at DECAY_PER_S per second and gains 1 per flagged frame, so a
     burst of flags crosses M while isolated flags never do. Alarms also clear
     when their ID falls silent, which is what stops an attacker's ID latching
     between floods.
     """
-    score, last_t, firing = {}, {}, {}
+    score, last_t, since = {}, {}, {}
     out = []
     t_l, c_l, p_l = t.tolist(), can_id.tolist(), pred.tolist()
+    end_t = t_l[-1] if t_l else 0.0
 
     for i in range(len(t_l)):
         now = t_l[i]
         cid = c_l[i]
 
-        # any firing ID that has gone quiet is cleared
-        if firing:
-            for fid in [k for k, v in firing.items() if v]:
-                if now - last_t.get(fid, now) > CLEAR_SILENT_S:
-                    firing[fid] = False
-                    score[fid] = 0.0
+        # a firing ID that has gone quiet is cleared, and its interval closed
+        for fid in [k for k in since if since[k] is not None]:
+            if now - last_t.get(fid, now) > CLEAR_SILENT_S:
+                out.append((since[fid], now, fid))
+                since[fid] = None
+                score[fid] = 0.0
 
         sc = score.get(cid, 0.0) - DECAY_PER_S * (now - last_t.get(cid, now))
         if sc < 0.0:
@@ -97,11 +106,17 @@ def alarms(t, can_id, pred, m: float):
         last_t[cid] = now
 
         hot = sc >= m
-        if hot and not firing.get(cid):
-            out.append((now, cid))
-        firing[cid] = hot
+        was = since.get(cid)
+        if hot and was is None:
+            since[cid] = now
+        elif not hot and was is not None:
+            out.append((was, now, cid))
+            since[cid] = None
 
-    return out
+    for cid, st in since.items():
+        if st is not None:
+            out.append((st, end_t, cid))
+    return sorted(out)
 
 
 def main() -> None:
@@ -151,16 +166,20 @@ def main() -> None:
 
     rows = []
     for m in [int(v) for v in args.m.split(",")]:
-        ev = alarms(t, cid, pred, float(m))
+        ev = alarm_intervals(t, cid, pred, float(m))
         hit, lat = 0, []
-        for s, e in wins:
-            first = next((at for at, _ in ev if s <= at <= e + GRACE_S), None)
-            if first is not None:
+        for ws, we in wins:
+            # detected if the alarm was ACTIVE at any point in the window
+            over = [(a, b) for a, b, _ in ev
+                    if b >= ws and a <= we + GRACE_S]
+            if over:
                 hit += 1
-                lat.append((first - s) * 1000.0)
-        # an alarm outside every window, with the grace margin, is false
-        fa = sum(1 for at, _ in ev
-                 if not any(s - GRACE_S <= at <= e + GRACE_S for s, e in wins))
+                first = min(a for a, _ in over)
+                lat.append(max(0.0, first - ws) * 1000.0)
+        # an alarm interval overlapping no window at all is a false alarm
+        fa = sum(1 for a, b, _ in ev
+                 if not any(b >= ws - GRACE_S and a <= we + GRACE_S
+                            for ws, we in wins))
         med = float(np.median(lat)) if lat else float("nan")
         worst = float(np.max(lat)) if lat else float("nan")
         per_h = fa / (clean_time / 3600.0)
