@@ -2,7 +2,7 @@
 //
 // Random forest CAN intrusion detector.
 //   trees            3
-//   comparator nodes 14
+//   comparator nodes 8
 //   max tree depth   3
 //   features         dt_id, dt_id_dev, dt_ratio_q6, hd, hd_dev, dt_bus, burst, dlc, pl_violation, pl_popcount, id_rate, bus_rate
 //
@@ -32,28 +32,22 @@ module rf_forest (
 
     wire [2:0] vote;
 
-    // ---- tree 0 (6 comparators)
+    // ---- tree 0 (4 comparators)
     wire c0_0 = (id_rate <= 12'd288);
     wire c0_1 = (dt_ratio_q6 <= 12'd12);
-    wire c0_3 = (dt_bus <= 16'd3077);
-    wire c0_6 = (burst <= 4'd0);
-    wire c0_7 = (dt_id_dev <= 20'd8289);
-    wire c0_10 = (burst <= 4'd1);
-    assign vote[0] = (c0_0 ? (c0_1 ? 1'b1 : (c0_3 ? 1'b0 : 1'b0)) : (c0_6 ? (c0_7 ? 1'b0 : 1'b1) : (c0_10 ? 1'b1 : 1'b1)));
+    wire c0_4 = (burst <= 4'd0);
+    wire c0_5 = (dt_id_dev <= 20'd8289);
+    assign vote[0] = (c0_0 ? (c0_1 ? 1'b1 : 1'b0) : (c0_4 ? (c0_5 ? 1'b0 : 1'b1) : 1'b1));
 
-    // ---- tree 1 (4 comparators)
+    // ---- tree 1 (2 comparators)
     wire c1_0 = (pl_popcount <= 7'd2);
     wire c1_1 = (dt_id <= 20'd1310);
-    wire c1_2 = (dt_id_dev <= 20'd9711);
-    wire c1_5 = (id_rate <= 12'd72);
-    assign vote[1] = (c1_0 ? (c1_1 ? (c1_2 ? 1'b1 : 1'b1) : (c1_5 ? 1'b0 : 1'b0)) : 1'b0);
+    assign vote[1] = (c1_0 ? (c1_1 ? 1'b1 : 1'b0) : 1'b0);
 
-    // ---- tree 2 (4 comparators)
+    // ---- tree 2 (2 comparators)
     wire c2_0 = (pl_popcount <= 7'd2);
     wire c2_1 = (dt_ratio_q6 <= 12'd9);
-    wire c2_2 = (id_rate <= 12'd1978);
-    wire c2_5 = (hd_dev <= 7'd0);
-    assign vote[2] = (c2_0 ? (c2_1 ? (c2_2 ? 1'b1 : 1'b1) : (c2_5 ? 1'b0 : 1'b0)) : 1'b0);
+    assign vote[2] = (c2_0 ? (c2_1 ? 1'b1 : 1'b0) : 1'b0);
 
     wire [1:0] vote_count = vote[0] + vote[1] + vote[2];
     wire attack_comb = (vote_count >= 2'd2);

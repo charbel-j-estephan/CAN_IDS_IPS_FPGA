@@ -2,7 +2,7 @@
 //
 // Random forest CAN intrusion detector.
 //   trees            7
-//   comparator nodes 23
+//   comparator nodes 19
 //   max tree depth   3
 //   features         dt_id, dt_id_dev, dt_ratio_q6, hd, hd_dev, dt_bus, burst, dlc, pl_violation, pl_popcount, id_rate, bus_rate
 //
@@ -32,10 +32,9 @@ module rf_forest (
 
     wire [6:0] vote;
 
-    // ---- tree 0 (2 comparators)
+    // ---- tree 0 (1 comparators)
     wire c0_0 = (id_rate <= 12'd143);
-    wire c0_1 = (dt_ratio_q6 <= 12'd6);
-    assign vote[0] = (c0_0 ? (c0_1 ? 1'b0 : 1'b0) : 1'b1);
+    assign vote[0] = (c0_0 ? 1'b0 : 1'b1);
 
     // ---- tree 1 (2 comparators)
     wire c1_0 = (pl_popcount <= 7'd0);
@@ -49,28 +48,25 @@ module rf_forest (
     wire c2_5 = (dt_ratio_q6 <= 12'd22);
     assign vote[2] = (c2_0 ? (c2_1 ? (c2_2 ? 1'b0 : 1'b1) : (c2_5 ? 1'b1 : 1'b0)) : 1'b0);
 
-    // ---- tree 3 (5 comparators)
+    // ---- tree 3 (4 comparators)
     wire c3_0 = (dt_id <= 20'd6627);
     wire c3_1 = (dt_id <= 20'd1480);
-    wire c3_2 = (burst <= 4'd0);
-    wire c3_5 = (id_rate <= 12'd399);
-    wire c3_8 = (dt_ratio_q6 <= 12'd3);
-    assign vote[3] = (c3_0 ? (c3_1 ? (c3_2 ? 1'b1 : 1'b1) : (c3_5 ? 1'b0 : 1'b1)) : (c3_8 ? 1'b1 : 1'b0));
+    wire c3_3 = (id_rate <= 12'd399);
+    wire c3_6 = (dt_ratio_q6 <= 12'd3);
+    assign vote[3] = (c3_0 ? (c3_1 ? 1'b1 : (c3_3 ? 1'b0 : 1'b1)) : (c3_6 ? 1'b1 : 1'b0));
 
-    // ---- tree 4 (2 comparators)
+    // ---- tree 4 (1 comparators)
     wire c4_0 = (id_rate <= 12'd143);
-    wire c4_1 = (dt_ratio_q6 <= 12'd6);
-    assign vote[4] = (c4_0 ? (c4_1 ? 1'b0 : 1'b0) : 1'b1);
+    assign vote[4] = (c4_0 ? 1'b0 : 1'b1);
 
-    // ---- tree 5 (7 comparators)
+    // ---- tree 5 (6 comparators)
     wire c5_0 = (dt_id <= 20'd6627);
     wire c5_1 = (dt_id_dev <= 20'd6497);
     wire c5_2 = (dt_ratio_q6 <= 12'd11);
     wire c5_5 = (pl_popcount <= 7'd0);
     wire c5_8 = (burst <= 4'd0);
-    wire c5_9 = (hd <= 7'd0);
-    wire c5_12 = (dt_id_dev <= 20'd5003);
-    assign vote[5] = (c5_0 ? (c5_1 ? (c5_2 ? 1'b1 : 1'b0) : (c5_5 ? 1'b1 : 1'b0)) : (c5_8 ? (c5_9 ? 1'b0 : 1'b0) : (c5_12 ? 1'b0 : 1'b1)));
+    wire c5_10 = (dt_id_dev <= 20'd5003);
+    assign vote[5] = (c5_0 ? (c5_1 ? (c5_2 ? 1'b1 : 1'b0) : (c5_5 ? 1'b1 : 1'b0)) : (c5_8 ? 1'b0 : (c5_10 ? 1'b0 : 1'b1)));
 
     // ---- tree 6 (1 comparators)
     wire c6_0 = (dt_ratio_q6 <= 12'd0);

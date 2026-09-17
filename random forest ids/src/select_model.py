@@ -72,6 +72,64 @@ def tree_to_tables(est, feature_names):
     }
 
 
+def _depth_of(tree: dict, n: int) -> int:
+    if tree["is_leaf"][n]:
+        return 0
+    return 1 + max(_depth_of(tree, tree["left"][n]),
+                   _depth_of(tree, tree["right"][n]))
+
+
+def prune_equivalent(tree: dict) -> dict:
+    """Collapse any node whose whole subtree yields a single verdict.
+
+    sklearn will happily split a node when the split reduces impurity even
+    though both resulting leaves carry the same majority class. Such a
+    comparator costs a magnitude comparator and a mux in hardware and cannot
+    change the verdict, so it is dead weight.
+
+    The rewrite is provably behaviour preserving: a node is replaced by a leaf
+    only when every leaf below it already agrees, so no input can take a
+    different path to a different answer. select_model asserts the predictions
+    are unchanged rather than trusting this argument.
+    """
+    is_leaf, value = tree["is_leaf"], tree["value"]
+    left, right = tree["left"], tree["right"]
+
+    def verdicts(n: int):
+        if is_leaf[n]:
+            return {value[n]}
+        return verdicts(left[n]) | verdicts(right[n])
+
+    out = {k: [] for k in ("feature", "threshold", "left", "right",
+                           "is_leaf", "value")}
+
+    def emit(n: int) -> int:
+        idx = len(out["is_leaf"])
+        v = verdicts(n)
+        if is_leaf[n] or len(v) == 1:
+            out["feature"].append(0)
+            out["threshold"].append(0)
+            out["left"].append(0)
+            out["right"].append(0)
+            out["is_leaf"].append(1)
+            out["value"].append(next(iter(v)))
+            return idx
+        # placeholder, children are appended then the pointers are filled in
+        out["feature"].append(tree["feature"][n])
+        out["threshold"].append(tree["threshold"][n])
+        out["left"].append(0)
+        out["right"].append(0)
+        out["is_leaf"].append(0)
+        out["value"].append(0)
+        out["left"][idx] = emit(left[n])
+        out["right"][idx] = emit(right[n])
+        return idx
+
+    emit(0)
+    out["feature_names"] = list(tree["feature_names"])
+    return out
+
+
 def predict_tables(model, X) -> np.ndarray:
     """Reference integer implementation, the thing the RTL must match."""
     votes = np.zeros(len(X), dtype=np.int32)
@@ -173,14 +231,41 @@ def main() -> None:
         n_jobs=-1,
     ).fit(Xtr, ytr)
 
+    raw_trees = [tree_to_tables(e, cols) for e in clf.estimators_]
+    pruned_trees = [prune_equivalent(t) for t in raw_trees]
+
+    def n_cmp(trees):
+        return sum(1 for t in trees for x in t["is_leaf"] if not x)
+
+    before, after = n_cmp(raw_trees), n_cmp(pruned_trees)
+    if before != after:
+        print(f"pruned {before - after} comparator node(s) whose subtrees all "
+              f"agree: {before} -> {after}")
+
     model = {
         "feature_set": args.feature_set,
         "feature_names": cols,
         "feature_widths": [FEATURE_WIDTH[c] for c in cols],
         "n_trees": int(pick.n_trees),
-        "trees": [tree_to_tables(e, cols) for e in clf.estimators_],
+        "trees": pruned_trees,
         "cost": forest_cost(clf),
     }
+    # forest_cost counted the unpruned sklearn trees; restate it from what is
+    # actually being emitted
+    model["cost"]["internal_nodes"] = after
+    model["cost"]["leaves"] = sum(
+        1 for t in pruned_trees for x in t["is_leaf"] if x
+    )
+    model["cost"]["max_depth"] = max(
+        _depth_of(t, 0) for t in pruned_trees
+    )
+    model["cost"]["features_used"] = sorted({
+        t["feature"][i]
+        for t in pruned_trees
+        for i in range(len(t["is_leaf"]))
+        if not t["is_leaf"][i]
+    })
+    model["cost"]["n_features_used"] = len(model["cost"]["features_used"])
 
     # The integer tables must reproduce sklearn's trees exactly on both
     # truncations. The comparison is against the hard majority vote, not

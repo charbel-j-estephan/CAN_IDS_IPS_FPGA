@@ -250,6 +250,100 @@ drives cleanly. Recall drops to 93.4 % there because the model was trained
 against a flood of a known ID and the DoS capture floods an unknown one, which
 argues for training on a mix of attack styles rather than one.
 
+## Reading the trees
+
+`src/show_trees.py` prints any frozen forest as trees you can follow by eye,
+with each threshold translated into physical units:
+
+```bash
+python3 src/show_trees.py --model results/realatk_stealth/model.json
+```
+
+Where the same forest lives, in three forms:
+
+| file | form | for |
+|---|---|---|
+| `results/<tag>/model.json` | integer node tables | the Verilog generator and the reference predictor |
+| `rtl/<tag>/rf_forest.v` | one wire per comparator, nested muxes | synthesis |
+| `src/show_trees.py` output | indented tree with units | reading |
+
+### How a verdict is reached
+
+Every tree sees the same features and votes ATTACK or normal. The frame is
+flagged when a majority of trees vote ATTACK. Tree counts are always odd so the
+vote cannot tie, the same constraint the reference hardware design imposes.
+
+In hardware the trees are not walked one node at a time. Each internal node
+becomes one magnitude comparator, all of them evaluate simultaneously, and the
+path collapses through a mux tree, so the whole forest resolves in a single
+clock regardless of depth. In `rf_forest.v` that reads as one `wire cN_M` per
+comparator and one nested conditional per tree.
+
+### The recommended forest in full
+
+3 trees, 8 comparators, majority of 2. `id_rate` is a sustained-rate estimate
+where 64 means the ID is running at its normal rate; `dt_ratio_q6` is the
+current gap as a fraction of that ID's normal gap, where 64 means exactly on
+schedule.
+
+```
+TREE 0  (4 comparators)
+  id_rate <= 288                    running at most 4.5x normal rate?
+    yes: dt_ratio_q6 <= 12          arrived under 20 % into its normal gap?
+           yes: ATTACK
+           no:  normal
+    no:  burst <= 0                 no back-to-back frames of this ID?
+           yes: dt_id_dev <= 8289   gap within 8.29 ms of normal?
+                  yes: normal
+                  no:  ATTACK
+           no:  ATTACK
+
+TREE 1  (2 comparators)
+  pl_popcount <= 2                  payload almost entirely zero bits?
+    yes: dt_id <= 1310              arrived within 1.31 ms of the last one?
+           yes: ATTACK
+           no:  normal
+    no:  normal
+
+TREE 2  (2 comparators)
+  pl_popcount <= 2                  payload almost entirely zero bits?
+    yes: dt_ratio_q6 <= 9           arrived under 16 % into its normal gap?
+           yes: ATTACK
+           no:  normal
+    no:  normal
+```
+
+Read as one sentence: trees 1 and 2 catch a degenerate payload arriving far too
+early, and tree 0 catches a flood on timing and rate alone without looking at
+the payload at all. Tree 0 is why the forest still works when the attacker
+replays valid payloads, because it is the one that does not depend on them.
+
+### Pruning, and an honest note on what it bought
+
+Rendering the trees exposed comparators whose two branches led to the same
+verdict. sklearn creates them when a split reduces impurity but both leaves end
+up the same majority class. `prune_equivalent` in `select_model.py` collapses
+any node whose whole subtree agrees, which is behaviour preserving by
+construction and asserted against the unpruned predictions:
+
+| model | comparators before | after |
+|---|---|---|
+| recommended | 14 | **8** |
+| real DoS | 23 | **19** |
+
+Accuracy, false positives and false negatives are all unchanged to the frame.
+
+What it did **not** buy: the synthesized forest is byte identical before and
+after, 33 cells and 25 LUTs either way, because yosys and ABC were already
+eliminating that logic. So for the fully unrolled combinational forest here the
+gain is in model size and readability, and in the node count finally being an
+honest number rather than one inflated by up to 43 %.
+
+It would be a real area saving for a memory-central implementation, where the
+node table lives in BRAM and is walked one node per cycle. There every node
+costs storage and a cycle, so 14 nodes against 8 is a genuine difference. Worth
+knowing if the design is ever moved to that style to save LUTs.
+
 ## Hardware
 
 ```
@@ -357,6 +451,8 @@ src/export_rom.py      per-ID baseline ROM contents
 src/export_verilog.py  generate the forest RTL and both testbenches
 src/hw_report.py       area, latency and throughput budget
 src/report.py          markdown report of every sweep
+src/show_trees.py      print a frozen forest as readable trees
+src/syn_report.py      parse yosys statistics into a resource table
 src/cross_eval.py      score one frozen model against other attack styles
 src/attack_on_real.py  inject a flood into HCRL's real attack-free capture
 rtl/can_ids_features.v feature extractor
