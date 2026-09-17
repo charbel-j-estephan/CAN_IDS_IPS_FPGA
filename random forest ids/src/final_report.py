@@ -30,8 +30,9 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
-from eval_windows import (GRACE_S, alarm_intervals, attack_windows,  # noqa: E402
-                          classify, merge_episodes)
+from eval_windows import (GRACE_S, _bus_ratio_q6, _period_table,   # noqa: E402
+                          alarm_intervals, attack_windows, classify,
+                          merge_episodes)
 from features import FEATURE_SETS                                    # noqa: E402
 from select_model import predict_tables                              # noqa: E402
 
@@ -43,24 +44,35 @@ TRACES = [
     ("s316", "stealth on 0x316", "a second victim, 50.9 % unique payloads"),
     ("lowrate", "2x low-rate flood", "quiet enough to pass for jitter"),
     ("mixed", "mixed-rate floods", "2x to 33x, drawn per burst"),
+    ("soak", "1 hour soak", "1.8 % attack traffic, all 27 victim IDs"),
     ("syncan", "SynCAN flooding", "independent benchmark, different vehicle"),
 ]
 
 
-def score(tag, path, model, cols, m):
+def score(tag, path, model, cols, m, baseline=None):
     z = np.load(path, allow_pickle=True)
     columns = list(z["columns"])
     X = z["X"][:, [columns.index(c) for c in cols]]
     t, y, cid = z["t"], z["y"], z["can_id"]
     pred = predict_tables(model, X)
 
+    ratio = periods = bratio = None
+    if baseline is not None:
+        ratio = z["X"][:, columns.index("dt_ratio_q6")]
+        periods = _period_table(cid.astype(np.int64), baseline)
+        bratio = _bus_ratio_q6(
+            z["X"][:, columns.index("dt_bus")].astype(np.int64), baseline)
+
     wins = attack_windows(t, y)
     span = float(t[-1] - t[0])
     atk = sum(e - s for s, e in wins)
     clean_h = max(span - atk, 1e-9) / 3600.0
 
-    ev = merge_episodes(alarm_intervals(t, cid, pred, m))
-    inside, ring, false = classify(ev, wins)
+    ev = merge_episodes(alarm_intervals(
+        t, cid, pred, m, dt_ratio=ratio, id_period_us=periods,
+        bus_ratio=bratio))
+    inside, ring, false = classify(
+        ev, wins, id_period_us=(baseline.mean_interval if baseline else None))
 
     hit, lat, stale = 0, [], 0
     longest = max((b - a for a, b, _ in inside), default=0.0)
@@ -92,6 +104,10 @@ def main() -> None:
     ap.add_argument("--model", default="results/detector/model.json")
     ap.add_argument("--evcache", default="results/evcache2")
     ap.add_argument("--m", type=float, default=2.0)
+    ap.add_argument("--baseline", default="results/detector/baseline.json",
+                    help="needed for the period-scaled alarm decay")
+    ap.add_argument("--syncan-baseline",
+                    default="results/syncan_flooding/baseline.json")
     ap.add_argument("--out", default="results/final_report.json")
     ap.add_argument("--markdown", default="results/FINAL.md")
     args = ap.parse_args()
@@ -100,6 +116,12 @@ def main() -> None:
         model = json.load(fh)
     cols = FEATURE_SETS[model["feature_set"]]
     cal = model.get("calibration", {})
+    from cross_eval import load_baseline
+    baseline = load_baseline(args.baseline)
+    # SynCAN is a different vehicle, so its periods come from its own capture;
+    # the model's thresholds are the HCRL-calibrated ones either way
+    syncan_bl = (load_baseline(args.syncan_baseline)
+                 if os.path.exists(args.syncan_baseline) else baseline)
 
     rows = []
     for tag, label, note in TRACES:
@@ -107,7 +129,8 @@ def main() -> None:
         if not os.path.exists(path):
             print(f"  (no {path}, skipped)")
             continue
-        r = score(tag, path, model, cols, args.m)
+        r = score(tag, path, model, cols, args.m,
+                  syncan_bl if tag == "syncan" else baseline)
         r["label"], r["note"] = label, note
         rows.append(r)
 
@@ -115,7 +138,7 @@ def main() -> None:
     cpath = os.path.join(args.evcache, "clean.npz")
     control = None
     if os.path.exists(cpath):
-        control = score("clean", cpath, model, cols, args.m)
+        control = score("clean", cpath, model, cols, args.m, baseline)
         assert control["windows"] == 0, "the control must be attack free"
 
     td = sum(r["detected"] for r in rows)

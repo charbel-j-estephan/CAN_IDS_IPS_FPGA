@@ -42,8 +42,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 from attack_on_real import FRAME_TIME                             # noqa: E402
 from can_data import load_hcrl_normal_txt                         # noqa: E402
 from cross_eval import load_baseline                              # noqa: E402
-from eval_windows import (GRACE_S, alarm_intervals,               # noqa: E402
-                          attack_windows, classify, merge_episodes)
+from eval_windows import (GRACE_S, _bus_ratio_q6, _period_table,  # noqa: E402
+                          alarm_intervals, attack_windows, classify,
+                          merge_episodes)
 from features import FEATURE_SETS, extract                        # noqa: E402
 from select_model import predict_tables                           # noqa: E402
 
@@ -206,6 +207,10 @@ def main() -> None:
     feats = extract(df, baseline)
     X = feats[cols].to_numpy(np.int32)
     pred = predict_tables(model, X)
+    # same period-scaled alarm inputs the shipped detector uses
+    dt_ratio = feats["dt_ratio_q6"].to_numpy(np.int32)
+    periods = _period_table(can_id.astype(np.int64), baseline)
+    bratio = _bus_ratio_q6(feats["dt_bus"].to_numpy(np.int64), baseline)
 
     if args.cache_out:
         from features import FEATURE_NAMES
@@ -242,8 +247,11 @@ def main() -> None:
 
     rows = []
     for m in [float(v) for v in args.thresholds.split(",")]:
-        ev = merge_episodes(alarm_intervals(t, can_id, pred, m))
-        inside, ring, false = classify(ev, wins)
+        ev = merge_episodes(alarm_intervals(
+            t, can_id, pred, m, dt_ratio=dt_ratio, id_period_us=periods,
+            bus_ratio=bratio))
+        inside, ring, false = classify(ev, wins,
+                                       id_period_us=baseline.mean_interval)
         hit, lat = 0, []
         for ws, we in wins:
             over = [(a, b) for a, b, _ in inside

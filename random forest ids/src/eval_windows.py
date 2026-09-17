@@ -68,6 +68,17 @@ REARM_S = 0.25          # gap below which two alarms on one ID are one event
 # fall back below the 63 that a model trained on it roots on, so anything
 # inside 5 s of a window is the bucket draining rather than clean traffic.
 RING_S = 5.0
+# ...and in periods, which is the form that is actually right. A rate bucket
+# leaks once per frame of its ID, so its time constant is a number of that
+# ID's periods, not a number of seconds. Classifying the drain in seconds
+# undercounts it for slow IDs by the ratio of their periods: with a 5 s
+# window, 35 of 36 alarms called "false" turned out to sit within 10 of the
+# affected ID's own periods of a window ending, and the 36th within 50.
+# Every absolute threshold in this project has been wrong for the same
+# reason. The attack-free control is what the false-alarm claim actually
+# rests on, because there no classification choice can flatter it: with no
+# attack anywhere in the capture, every alarm is false by construction.
+RING_PERIODS = 20.0
 
 
 def attack_windows(t: np.ndarray, y: np.ndarray):
@@ -81,7 +92,30 @@ def attack_windows(t: np.ndarray, y: np.ndarray):
     return [(float(at[s]), float(at[e])) for s, e in zip(starts, ends)]
 
 
-def classify(ev, wins, ring_s: float = RING_S):
+def _period_table(can_id, baseline):
+    """Per-frame nominal period for its ID, 0 where the ID has no baseline."""
+    size = max(2048, int(can_id.max()) + 1)
+    table = np.zeros(size, dtype=np.int64)
+    for c, us in baseline.mean_interval.items():
+        if 0 <= int(c) < size:
+            table[int(c)] = int(us)
+    return table[can_id]
+
+
+def _bus_ratio_q6(dt_bus, baseline):
+    """Elapsed time in 64ths of the BUS's nominal interval.
+
+    Always defined, unlike the per-ID ratio, because the bus has a nominal
+    frame interval even when the ID carrying the frame is brand new.
+    """
+    from features import CAP_RATIO, RECIP_SHIFT
+    recip = (int(round((1 << RECIP_SHIFT) * 64.0 / baseline.bus_interval_us))
+             if baseline.bus_interval_us > 0 else 0)
+    return np.clip((dt_bus * recip) >> RECIP_SHIFT, 0, CAP_RATIO)
+
+
+def classify(ev, wins, ring_s: float = RING_S, id_period_us=None,
+             ring_periods: float = RING_PERIODS):
     """Split alarm episodes into detections, post-attack ringing, and false alarms.
 
     An episode with no injected frames in it is not automatically a false
@@ -100,9 +134,17 @@ def classify(ev, wins, ring_s: float = RING_S):
     """
     inside, ring, false = [], [], []
     for a, b, cid in ev:
+        # the drain window for this ID: whichever of the two is longer, since
+        # a fast ID's buckets are still governed by the bus-level transient
+        win = ring_s
+        if id_period_us is not None:
+            per = id_period_us.get(int(cid), 0) if hasattr(id_period_us, "get") \
+                else 0
+            if per > 0:
+                win = max(win, ring_periods * per / 1e6)
         if any(b >= ws - GRACE_S and a <= we + GRACE_S for ws, we in wins):
             inside.append((a, b, cid))
-        elif any(0 <= a - we <= ring_s for _, we in wins):
+        elif any(0 <= a - we <= win for _, we in wins):
             ring.append((a, b, cid))
         else:
             false.append((a, b, cid))
@@ -141,17 +183,57 @@ def merge_episodes(intervals, gap: float = REARM_S):
     return sorted(out)
 
 
-def alarm_intervals(t, can_id, pred, m: float):
+# The decay, expressed the way everything else in this system had to be: in
+# the ID's own periods rather than in seconds. A fixed 50/s means a flag is
+# gone in 20 ms, so two flags 33 ms apart never combine, and every ID running
+# at 100 ms or slower is undetectable at any rate an attacker would bother
+# with. DECAY_PERIODS costs one score unit per that many of the ID's nominal
+# periods instead, driven by dt_ratio_q6, which is already the elapsed gap in
+# 64ths of that period and already computed for every frame: a subtract and a
+# shift, no new state. Worst-case clear time is CAP_SCORED * DECAY_PERIODS of
+# the ID's period, which is why the cap is small -- at 64 a 1 s ID that took
+# 26 flags stayed alarming for 111 s and marked every window inside two
+# minutes as detected.
+DECAY_PERIODS = 2.0
+# The cap is not a free constant: it has to exceed the alarm threshold or the
+# score can never reach it, and every unit above the threshold is time the
+# alarm cannot clear in. So it is derived from the threshold rather than set,
+# and a fixed 3 silently reported 0 of 73 windows at threshold 4 before this
+# was derived.
+CAP_HEADROOM = 1.0
+
+
+def alarm_intervals(t, can_id, pred, m: float, dt_ratio=None,
+                    id_period_us=None, decay_periods: float = DECAY_PERIODS,
+                    cap: float = 0.0, bus_ratio=None):
     """Per-ID leaky integrator. Returns (start, end, id) alarming intervals.
 
-    score bleeds at DECAY_PER_S per second and gains 1 per flagged frame, so a
-    burst of flags crosses M while isolated flags never do. Alarms also clear
-    when their ID falls silent, which is what stops an attacker's ID latching
-    between floods.
+    A flagged frame adds 1 to that ID's score, the score bleeds away with
+    elapsed time, and the ID alarms while the score is at or above M. So a
+    burst of flags crosses M while isolated flags never do.
+
+    With `dt_ratio` supplied the decay is scaled to the ID's own period, which
+    is what the detector actually ships; without it the decay is the fixed
+    DECAY_PER_S, kept so the two can be compared. `bus_ratio` covers the ID
+    that has no baseline at all, whose dt_ratio_q6 is 0 on every frame -- 100 %
+    of ID 0x000's -- and would otherwise never decay.
+
+    Clear-on-silence stays in real time in both. It has to: an ID has gone
+    quiet after a certain amount of elapsed time, and an unbaselined ID has no
+    period to express that in. Scaling it by a ratio instead made 0x000, which
+    appears only inside floods, never register as silent between them, and one
+    alarm ran 215 s across four separate windows.
     """
     score, last_t, since = {}, {}, {}
     out = []
     t_l, c_l, p_l = t.tolist(), can_id.tolist(), pred.tolist()
+    r_l = dt_ratio.tolist() if dt_ratio is not None else None
+    b_l = bus_ratio.tolist() if bus_ratio is not None else None
+    per_l = id_period_us.tolist() if id_period_us is not None else None
+    step = 64.0 * decay_periods
+    if cap <= 0.0:
+        cap = m + CAP_HEADROOM
+    assert cap > m, f"score cap {cap} cannot reach threshold {m}"
     end_t = t_l[-1] if t_l else 0.0
 
     for i in range(len(t_l)):
@@ -159,19 +241,30 @@ def alarm_intervals(t, can_id, pred, m: float):
         cid = c_l[i]
 
         # a firing ID that has gone quiet is cleared, and its interval closed
+        quiet = CLEAR_SILENT_S
+        if per_l is not None and per_l[i] > 0:
+            quiet = max(quiet, CLEAR_SILENT_PERIODS_DEFAULT * per_l[i] / 1e6)
         for fid in [k for k in since if since[k] is not None]:
-            if now - last_t.get(fid, now) > CLEAR_SILENT_S:
+            if now - last_t.get(fid, now) > quiet:
                 out.append((since[fid], now, fid))
                 since[fid] = None
                 score[fid] = 0.0
 
-        sc = score.get(cid, 0.0) - DECAY_PER_S * (now - last_t.get(cid, now))
+        if r_l is None:
+            sc = score.get(cid, 0.0) - DECAY_PER_S * (now - last_t.get(cid, now))
+            ceiling = SCORE_CAP
+        else:
+            ratio = r_l[i]
+            if ratio == 0 and b_l is not None:
+                ratio = b_l[i]
+            sc = score.get(cid, 0.0) - ratio / step
+            ceiling = cap
         if sc < 0.0:
             sc = 0.0
         if p_l[i]:
             sc += 1.0
-            if sc > SCORE_CAP:
-                sc = SCORE_CAP
+            if sc > ceiling:
+                sc = ceiling
         score[cid] = sc
         last_t[cid] = now
 
@@ -207,8 +300,16 @@ def main() -> None:
 
     loader = load_hcrl_csv if args.format == "hcrl" else load_syncan_csv
     te = truncate(loader(args.csv), *TEST_SPAN)
-    X = extract(te, baseline)[cols].to_numpy(np.int32)
+    feats = extract(te, baseline)
+    X = feats[cols].to_numpy(np.int32)
     pred = predict_tables(model, X)
+
+    # the period-scaled decay needs the elapsed gap in 64ths of the ID's own
+    # period, which the extractor already produced, plus the bus-level ratio
+    # for any ID with no baseline
+    dt_ratio = feats["dt_ratio_q6"].to_numpy(np.int32)
+    periods = _period_table(te.can_id.to_numpy(np.int64), baseline)
+    bratio = _bus_ratio_q6(feats["dt_bus"].to_numpy(np.int64), baseline)
 
     t = te.timestamp.to_numpy()
     y = te.label.to_numpy()
@@ -236,7 +337,9 @@ def main() -> None:
 
     rows = []
     for m in [int(v) for v in args.m.split(",")]:
-        ev = merge_episodes(alarm_intervals(t, cid, pred, float(m)))
+        ev = merge_episodes(alarm_intervals(
+            t, cid, pred, float(m), dt_ratio=dt_ratio,
+            id_period_us=periods, bus_ratio=bratio))
         hit, lat = 0, []
         for ws, we in wins:
             # detected if the alarm was ACTIVE at any point in the window

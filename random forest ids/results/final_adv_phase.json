@@ -146,28 +146,11 @@
  "rows": [
   {
    "m": 2.0,
-   "missed": [
-    {
-     "window": 1,
-     "start": 133.21681902590942,
-     "seconds": 1.7981398325805742,
-     "victim": 160,
-     "rate": 2.0,
-     "frames": 19
-    },
-    {
-     "window": 2,
-     "start": 237.3299798965454,
-     "seconds": 0.39970911460875413,
-     "victim": 161,
-     "rate": 2.0,
-     "frames": 5
-    }
-   ],
+   "missed": [],
    "windows": 19,
-   "detected": 17,
-   "median_ms": 15.058005699074783,
-   "worst_ms": 39.73605450460127,
+   "detected": 19,
+   "median_ms": 15.135372528220614,
+   "worst_ms": 149.87993240356445,
    "false_alarms": 0,
    "per_hour": 0.0,
    "seam_alarms": 0,

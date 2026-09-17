@@ -160,20 +160,11 @@
  "rows": [
   {
    "m": 2.0,
-   "missed": [
-    {
-     "window": 2,
-     "start": 164.72056887332155,
-     "seconds": 0.7813984657282731,
-     "victim": 161,
-     "rate": 33.0,
-     "frames": 14
-    }
-   ],
+   "missed": [],
    "windows": 21,
-   "detected": 20,
-   "median_ms": 15.227756169927886,
-   "worst_ms": 1128.3007178738699,
+   "detected": 21,
+   "median_ms": 15.631092575176808,
+   "worst_ms": 119.42815780639648,
    "false_alarms": 0,
    "per_hour": 0.0,
    "seam_alarms": 0,

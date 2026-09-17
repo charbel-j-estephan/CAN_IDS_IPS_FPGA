@@ -21,9 +21,14 @@ threshold set on a 10 ms ID means the same thing on a 1 s ID, and on a
 different vehicle.
 
 Above it sits a per-ID leaky integrator. A flagged frame adds 1 to that ID's
-score, the score decays with elapsed time, and the ID alarms at 2. That layer
-is what makes the per-frame residual irrelevant: the detector flags 10 486
-clean frames across an hour of traffic and raises **zero** false alarms,
+score, the score decays with elapsed time, and the ID alarms at 2. Crucially
+the decay is **one unit per two of that ID's own nominal periods**, not per
+fixed interval, so the alarm behaves the same on a 10 ms ID and a 1 s one. It
+is driven by `dt_ratio_q6`, which is already the elapsed gap in 64ths of that
+period, so it costs a subtract and a shift and no new state.
+
+That layer is what makes the per-frame residual irrelevant: the detector flags
+10 486 clean frames across an hour of traffic and raises **zero** false alarms,
 because those flags are scattered singles that decay before the next one
 arrives.
 
@@ -43,17 +48,25 @@ threshold 2, every trace a held-out slice.
 
 | trace | windows | detected | median | worst | false alarms |
 |---|---|---|---|---|---|
-| real HCRL DoS capture | 73 | **73** | 1.0 ms | 5.3 ms | 0 |
-| 0x000 flood | 5 | **5** | 1.3 ms | 1.6 ms | 0 |
+| real HCRL DoS capture | 73 | **73** | 1.5 ms | 31.9 ms | 0 |
+| 0x000 flood | 5 | **5** | 1.8 ms | 2.1 ms | 0 |
 | valid-ID flood | 5 | **5** | 1.0 ms | 1.8 ms | 0 |
 | stealth on 0x2c0 | 5 | **5** | 1.0 ms | 1.8 ms | 0 |
 | stealth on 0x316 | 5 | **5** | 1.3 ms | 1.8 ms | 0 |
 | 2x low-rate flood | 7 | **7** | 10.0 ms | 10.0 ms | 0 |
-| mixed-rate floods | 43 | **43** | 1.3 ms | 10.3 ms | 0 |
+| mixed-rate floods | 43 | **43** | 3.8 ms | 10.3 ms | 0 |
+| 1 hour soak, 1.8 % attack | 48 | **48** | 6.9 ms | 399.6 ms | 0 |
 | SynCAN flooding | 53 | **53** | 4.9 ms | 15.7 ms | 0 |
-| **total** | **196** | **196** | | **15.7 ms** | **0** |
+| **total** | **244** | **244** | | **399.6 ms** | **0** |
 
-59 minutes of clean traffic across those traces, 0.00 false alarms per hour.
+117 minutes of clean traffic across those traces, 0.00 false alarms per hour,
+and **0 of 244** windows opened on an already-running alarm.
+
+The 399.6 ms worst case is one attack on a 1 s period ID. Excluding that trace
+nothing exceeds 31.9 ms, and the reason is arithmetic rather than tuning: a 1 s
+ID flooded at 5x is injected every 200 ms, so two corroborating frames take
+400 ms to arrive. Detection latency on this detector is set by the victim's own
+period, not by the model.
 
 The SynCAN row is the one worth pausing on. That is a different vehicle, a
 different capture format and signal-level rather than raw payload bytes, scored
@@ -83,9 +96,14 @@ at 30 to 120 second intervals across all 27 victim IDs.
 | | |
 |---|---|
 | trace | 6 962 927 frames, 59.1 min, **1.78 %** attack traffic |
-| bursts caught | 44 / 48 |
-| worst detect | 39.7 ms |
+| bursts caught | **48 / 48** |
+| worst detect | 399.6 ms (a 1 s period victim) |
+| clean frames flagged | 10 486 |
 | false alarms | **0** in 58.0 min of clean traffic |
+
+Those 10 486 flagged clean frames raising zero alarms is the alarm layer doing
+its job. They are scattered singles, mostly the victim's own real frames during
+a flood, and each one decays before the next arrives.
 
 ### The hard attacks, and where it fails
 
@@ -95,9 +113,9 @@ arrival pattern stays perfectly regular and the rate never exceeds 2x.
 
 | attack | caught | worst | false alarms |
 |---|---|---|---|
-| exact-midpoint phasing, 2x | 17 / 19 | 39.7 ms | 0 |
-| creep, 1.2x | 15 / 17 | 26.3 ms | 0 |
-| ramp, 1.2x to 8x | 20 / 21 | 1128.3 ms | 0 |
+| exact-midpoint phasing, 2x | **19 / 19** | 149.9 ms | 0 |
+| creep, 1.2x | **17 / 17** | 142.8 ms | 0 |
+| ramp, 1.2x to 8x | **21 / 21** | 119.4 ms | 0 |
 | single injected frame | **0 / 22** | — | 0 |
 
 The single-frame row is the honest floor. An alarm that waits for corroborating
@@ -105,8 +123,18 @@ evidence cannot fire on one frame, and no threshold fixes that; it is a
 property of the design. If one injected frame matters, this is the wrong
 architecture.
 
-The ramp's 1128 ms worst case is the attack working as intended: it opens at
-1.2x, below anything that fires, and is caught when it speeds up.
+Everything else in that table was a miss until the alarm decay was scaled to
+the ID's period. For the record, at each stage:
+
+| attack | trained forest | + calibrated thresholds | + period-scaled decay |
+|---|---|---|---|
+| exact-midpoint 2x | 0 / 19 | 17 / 19 | **19 / 19** |
+| creep 1.2x | 3 / 17 | 15 / 17 | **17 / 17** |
+| ramp 1.2x to 8x | 20 / 21 | 20 / 21 | **21 / 21** |
+
+The ramp's worst case fell from 1128 ms to 119 ms in that last step, because
+the integrator no longer throws away the evidence from the slow opening phase
+before the fast phase arrives.
 
 ## How it got here
 
@@ -233,7 +261,8 @@ rate, victim and phasing of an attack nobody thought to generate.
 |---|---|---|---|---|
 | `no_payload` forest | 8 | 181 | 60.0 ms | 7 / 19 |
 | `per_id` forest | 4 | 187 | 233.9 ms | 0 / 19 |
-| **clean-calibrated rule** | **3** | **187** | **39.7 ms** | **17 / 19** |
+| clean-calibrated rule | 3 | 187 | 39.7 ms | 17 / 19 |
+| **+ period-scaled decay** | **3** | **191** | **399.6 ms** | **19 / 19** |
 
 Read the last column carefully, because it is not a clean progression. The
 `per_id` forest is *worse* on the phase attack than the 8-comparator one it
@@ -355,18 +384,20 @@ frames before it was fixed.
 
 - **One injected frame is not detectable**, by construction. The alarm waits
   for corroboration.
-- **A 1.2x flood is caught 15 times in 17.** Below roughly 1.2x the added
-  frames sit inside normal jitter.
+- **Below about 1.2x, the added frames sit inside normal jitter.** At 1.2x it
+  is 17 of 17; nothing slower has been tested and nothing slower should be
+  assumed to work.
 - **The slowest IDs cost latency, not detection.** A 1 s ID flooded at 5x
   injects every 200 ms, so two flags take 400 ms. That is arithmetic, not
-  tuning.
+  tuning, and it sets the 399.6 ms worst case.
 - **Post-attack ringing is real.** The rate buckets drain for 1.4 to 4.6 s
   after a flood, and during that window bystander IDs can alarm. It is reported
   separately and is not a false positive on clean traffic, but an operator
   would see it.
 - **The clean capture is 8.4 minutes.** A false-alarm rate of "zero per hour"
-  rests on 59 minutes of clean traffic across all traces and one 8.4 minute
-  attack-free control. It is not a fleet-scale figure.
+  rests on 117 minutes of clean traffic across all traces and one 8.4 minute
+  attack-free control, and the soak hour is that same capture tiled seven
+  times rather than seven independent hours. It is not a fleet-scale figure.
 - **Spoofing attacks are untested.** HCRL's `Fuzzy_dataset.csv`,
   `gear_dataset.csv` and `RPM_dataset.csv` change payload contents without
   changing timing, so a rate-and-timing detector is the wrong shape for them

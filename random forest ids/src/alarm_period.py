@@ -165,7 +165,7 @@ def bus_ratio_q6(dt_bus, baseline):
                    0, CAP_RATIO)
 
 
-def run(tr, ev, m):
+def run(tr, ev, m, periods=None):
     """Score one trace, and measure latching rather than trusting it away.
 
     `stale` counts windows that opened while an alarm was already running.
@@ -174,7 +174,7 @@ def run(tr, ev, m):
     alarm satisfies it for free, so the count is reported next to the
     detections instead of being folded into them.
     """
-    inside, ring, false = classify(ev, tr["wins"])
+    inside, ring, false = classify(ev, tr["wins"], id_period_us=periods)
     hit, lat, stale = 0, [], 0
     longest = 0.0
     for a, b, _ in inside:
@@ -256,7 +256,8 @@ def main() -> None:
                     tr["t"], tr["can_id"], tr["pred"], tr["ratio"], args.m,
                     per, cap=cap, bus_ratio=tr["bratio"],
                     id_period_us=tr["period"])
-            h, w, f, r, lat, st, lg = run(tr, merge_episodes(ev), args.m)
+            h, w, f, r, lat, st, lg = run(tr, merge_episodes(ev), args.m,
+                                          baseline.mean_interval)
             det += h
             win += w
             fa += f
@@ -291,7 +292,11 @@ def main() -> None:
           and r["stale_windows"] <= 0.1 * r["windows"]
           and r["longest_alarm_s"] <= 30.0]
     if ok:
-        best = max(ok, key=lambda r: (r["detected"], -r["worst_ms"]))
+        # among rules that detect everything, prefer the one whose alarms
+        # clear soonest: stale windows and the longest alarm both measure
+        # latching, and two rules tied on detection are not equivalent
+        best = max(ok, key=lambda r: (r["detected"], -r["stale_windows"],
+                                      -r["longest_alarm_s"], -r["worst_ms"]))
         print(f"best rule that detects without latching: {best['rule']}, "
               f"cap {best['cap']:.0f} -- {best['detected']}/{best['windows']} "
               f"windows, worst {best['worst_ms']:.1f} ms, longest alarm "
