@@ -1,0 +1,151 @@
+{
+ "feature_set": "per_id",
+ "feature_names": [
+  "dt_ratio_q6",
+  "id_rate"
+ ],
+ "n_trees": 3,
+ "trees": [
+  {
+   "feature": [
+    0,
+    1,
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    24,
+    202,
+    0,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    2,
+    0,
+    0,
+    0
+   ],
+   "right": [
+    4,
+    3,
+    0,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    0,
+    1,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_ratio_q6",
+    "id_rate"
+   ]
+  },
+  {
+   "feature": [
+    1,
+    0,
+    0
+   ],
+   "threshold": [
+    143,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1
+   ],
+   "feature_names": [
+    "dt_ratio_q6",
+    "id_rate"
+   ]
+  },
+  {
+   "feature": [
+    1,
+    0,
+    0
+   ],
+   "threshold": [
+    152,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1
+   ],
+   "feature_names": [
+    "dt_ratio_q6",
+    "id_rate"
+   ]
+  }
+ ],
+ "cost": {
+  "internal_nodes": 4,
+  "leaves": 7,
+  "max_depth": 2,
+  "features_used": [
+   0,
+   1
+  ],
+  "n_features_used": 2
+ },
+ "test_metrics": {
+  "accuracy": 0.9894689041633125,
+  "precision": 0.8912455835342942,
+  "recall": 0.9936473795440619,
+  "f1": 0.9396648573219333,
+  "fpr": 0.010906967928159797,
+  "tp": 79459,
+  "tn": 879277,
+  "fp": 9696,
+  "fn": 508
+ }
+}

@@ -117,6 +117,14 @@ FEATURE_SETS = {
     # the absolute features away is the same move as taking can_id away: it
     # removes a shortcut that happens to work on the training victims.
     "scale_free": ["dt_ratio_q6", "id_rate", "bus_rate"],
+    # scale-free and strictly per-ID. bus_rate is dropped because it is a
+    # bus-wide signal being used to make a per-ID decision, which is a
+    # category error and shows up as one: a model rooting on bus_rate <= 63,
+    # where clean traffic sits at 60 and a finished flood leaves it at 64 to
+    # 66 for 1.4 to 4.6 seconds, alarmed on eight innocent IDs at once two
+    # and a half seconds after a DoS ended. The per-ID features carry the
+    # signal on their own; bus_rate only adds cross-ID contamination.
+    "per_id": ["dt_ratio_q6", "id_rate"],
     # scale-free plus the bus-level timing, which is an absolute microsecond
     # count but describes the bus rather than any one ID's period
     "scale_free_bus": ["dt_ratio_q6", "id_rate", "bus_rate", "dt_bus", "dlc"],

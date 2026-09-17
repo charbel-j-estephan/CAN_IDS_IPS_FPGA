@@ -57,9 +57,17 @@ WINDOW_GAP_S = 0.5      # injected frames this far apart start a new window
 GRACE_S = 0.05          # an alarm this soon after a window ends still counts
 DECAY_PER_S = 50.0      # score units bled off per second of elapsed time
 CLEAR_SILENT_S = 0.2    # an ID quiet this long has its alarm cleared
+# For the period-scaled variant in alarm_period.py: how many of an ID's own
+# nominal periods of silence clear its alarm. 0.2 s is 20 periods for a 10 ms
+# ID and a fifth of one for a 1 s ID, which is the same absolute-threshold bug
+# the features had.
+CLEAR_SILENT_PERIODS_DEFAULT = 20.0
 SCORE_CAP = 64.0        # so a long flood cannot build an unclearable score
 REARM_S = 0.25          # gap below which two alarms on one ID are one event
-RING_S = 2.0            # after a window ends the rate buckets are still draining
+# Measured, not chosen: after a flood ends, bus_rate takes 1.4 to 4.6 s to
+# fall back below the 63 that a model trained on it roots on, so anything
+# inside 5 s of a window is the bucket draining rather than clean traffic.
+RING_S = 5.0
 
 
 def attack_windows(t: np.ndarray, y: np.ndarray):
