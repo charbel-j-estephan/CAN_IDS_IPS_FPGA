@@ -291,8 +291,14 @@ Scored on SynCAN's own held-out slice, with its window labels:
 | feature set | best accuracy | recall | comparators |
 |---|---|---|---|
 | timing and rate only | 97.11 % | 92.53 % | 508 |
-| the same at eight comparators | 96.74 % | 92.03 % | 8 |
+| all features | 97.11 % | 93.80 % | 420 |
 | reference paper, 2 features | 88.22 % | **59.56 %** | 9 |
+| the frozen model, after pruning | 96.74 % | 92.03 % | **8** |
+
+Comparator counts from the sweep are as trained. A frozen model then loses every
+comparator whose two branches reach the same verdict, which is why the last row
+is far smaller than the rows above it: that model's sweep point was 21 nodes and
+it pruned to 8 with identical predictions.
 
 The reference design's two features lose a third of all attacks on data neither
 design was tuned against, while timing and rate hold 92 %. That gap is the case
@@ -318,6 +324,11 @@ Where the same forest lives, in three forms:
 |---|---|---|
 | `results/<tag>/model.json` | integer node tables | the reference predictor, and anything that consumes the model |
 | `src/show_trees.py` output | indented tree with units | reading |
+| `results/dashboard.html` | charts and tables, all datasets | comparing at a glance |
+
+`results/dashboard.html` is generated from `src/export_viz_data.py` output and
+opens in a browser with no server. Every figure on it is read from that JSON, so
+re-running a sweep and regenerating the data updates the page.
 
 ### How a verdict is reached
 

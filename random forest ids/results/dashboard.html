@@ -1,0 +1,553 @@
+<title>CAN Flood Detector</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --plane:#f9f9f7; --surface:#fcfcfb; --raise:#ffffff;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --hair:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --crit:#d03b3b; --good:#0ca30c; --warn:#fab219;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --raise:#212120;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --hair:rgba(255,255,255,.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --crit:#d03b3b; --good:#0ca30c;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --plane:#0d0d0d; --surface:#1a1a19; --raise:#212120;
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --hair:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --crit:#d03b3b; --good:#0ca30c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 16px;padding-block:40px 64px}
+h1{font-size:clamp(26px,4.4vw,38px);line-height:1.12;margin:0 0 10px;
+  letter-spacing:-.022em;text-wrap:balance;font-weight:650}
+.lede{color:var(--ink-2);max-width:62ch;margin:0 0 6px;font-size:16px}
+.stamp{font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  letter-spacing:.04em;text-transform:uppercase;margin-top:18px}
+section{margin-top:46px}
+h2{font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);margin:0 0 4px}
+h3{font-size:20px;font-weight:620;letter-spacing:-.012em;margin:0 0 10px;
+  text-wrap:balance}
+p{margin:0 0 12px;max-width:66ch;color:var(--ink-2)}
+p strong{color:var(--ink);font-weight:620}
+.tiles{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+  margin-top:18px}
+.tile{background:var(--surface);border:1px solid var(--hair);border-radius:10px;
+  padding:15px 16px 14px}
+.tile .k{font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--muted);font-weight:620}
+.tile .v{font-size:30px;font-weight:650;letter-spacing:-.025em;margin-top:5px;
+  font-variant-numeric:tabular-nums;line-height:1.05}
+.tile .s{font-size:12.5px;color:var(--ink-2);margin-top:3px}
+.tile.bad .v{color:var(--crit)}
+.panel{background:var(--surface);border:1px solid var(--hair);border-radius:12px;
+  padding:18px;margin-top:18px}
+.ctl{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+button.chip{font:inherit;font-size:12.5px;padding:6px 12px;border-radius:999px;
+  border:1px solid var(--hair);background:var(--raise);color:var(--ink-2);
+  cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+button.chip:hover{border-color:var(--axis)}
+button.chip[aria-pressed="true"]{background:var(--ink);color:var(--plane);
+  border-color:var(--ink)}
+button.chip:focus-visible{outline:2px solid var(--s1);outline-offset:2px}
+figure{margin:0}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:10px;max-width:70ch}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin:2px 0 12px;font-size:12.5px;
+  color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;flex:none}
+.tt{position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:var(--raise);border:1px solid var(--hair);border-radius:8px;
+  padding:8px 10px;font-size:12.5px;box-shadow:0 6px 22px rgba(0,0,0,.14);
+  z-index:9;max-width:230px}
+.tt b{font-variant-numeric:tabular-nums}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px}
+th,td{text-align:right;padding:8px 11px;border-bottom:1px solid var(--grid);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal;min-width:150px}
+thead th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted);font-weight:620;border-bottom:1px solid var(--axis)}
+tbody tr:last-child td{border-bottom:none}
+td.mono,th.mono{font-family:var(--mono);font-size:12.5px}
+tr.flag td{background:color-mix(in srgb,var(--crit) 9%,transparent)}
+tr.flag td.pill-cell{color:var(--crit);font-weight:650}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;
+  font-weight:620;padding:2px 8px;border-radius:999px;letter-spacing:.01em}
+.pill.ok{background:color-mix(in srgb,var(--good) 15%,transparent);color:var(--good)}
+.pill.no{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit)}
+.trees{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));
+  margin-top:16px}
+.tree{background:var(--surface);border:1px solid var(--hair);border-radius:10px;
+  padding:14px 16px}
+.tree .cap{font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--muted);font-weight:620;margin-bottom:9px}
+pre{font-family:var(--mono);font-size:12px;line-height:1.65;margin:0;
+  white-space:pre;overflow-x:auto;color:var(--ink-2)}
+pre .f{color:var(--ink);font-weight:600}
+pre .A{color:var(--crit);font-weight:600}
+pre .N{color:var(--good);font-weight:600}
+.note{border-left:2px solid var(--s2);padding:2px 0 2px 14px;margin-top:16px}
+.note p{margin:0;font-size:14px}
+details{margin-top:16px;border-top:1px solid var(--grid);padding-top:12px}
+summary{cursor:pointer;font-size:13px;color:var(--ink-2);font-weight:600}
+summary:focus-visible{outline:2px solid var(--s1);outline-offset:3px}
+footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--grid);
+  font-size:12.5px;color:var(--muted)}
+footer a{color:var(--ink-2)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<div class="wrap">
+
+<header>
+  <h1>How small can a CAN flood detector get?</h1>
+  <p class="lede">A random forest that flags injected CAN frames one frame at a
+  time. Trained on one contiguous slice of a capture and tested on a disjoint
+  later slice, never on shuffled rows. Every number below is measured on
+  held-out frames.</p>
+  <p class="stamp">HCRL car-hacking · SynCAN flooding · majority-vote scoring</p>
+</header>
+
+<section>
+  <h2>The model</h2>
+  <h3>Three trees, eight comparators</h3>
+  <p>Selected on the hardest attack available: a flood that reuses a
+  <em>legitimate</em> CAN ID and replays that ID's own real payloads, so nothing
+  about the payload gives it away.</p>
+  <div class="tiles" id="tiles"></div>
+</section>
+
+<section>
+  <h2>Sizing</h2>
+  <h3>Past roughly ten comparators, more model buys nothing</h3>
+  <p>Each point is the best forest achievable at that size. A comparator is one
+  <span class="mono">feature &le; threshold</span> test; the count is the total
+  across all trees, which is the thing that actually grows. These are the counts
+  as trained &mdash; a frozen model then loses any comparator whose two branches
+  reach the same verdict, so the shipped forest is smaller than its point here.</p>
+  <div class="panel">
+    <div class="ctl" id="ds" role="group" aria-label="Choose a dataset"></div>
+    <div class="legend" id="lg"></div>
+    <figure>
+      <svg id="c1" viewBox="0 0 760 340" role="img"
+           aria-label="Accuracy against comparator count"></svg>
+      <figcaption id="cap1"></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <h2>Generalisation</h2>
+  <h3>The model that scores 100 % misses every attack</h3>
+  <p>Trained on the real HCRL DoS capture, it reaches a perfect score on its own
+  test slice. Run unchanged against a flood that reuses a valid ID with
+  plausible payloads, its recall is <strong>zero</strong>.</p>
+  <div class="tw panel">
+    <table>
+      <caption class="sr">Recall of the HCRL-trained model across attacks</caption>
+      <thead><tr><th>Evaluated against</th><th>Accuracy</th><th>Recall</th>
+        <th>False alarms</th><th>Missed</th><th class="pill-cell">Verdict</th></tr></thead>
+      <tbody id="xa"></tbody>
+    </table>
+  </div>
+  <div class="note">
+    <p>Its own thresholds explain it: two of seven trees test
+    <span class="mono">pl_popcount &le; 0</span>, meaning "the payload is all
+    zeros", and another tests <span class="mono">dt_ratio_q6 &le; 0</span>, a
+    value only reachable when an ID has no baseline at all. It learned
+    <em>this ID is not on the whitelist and its payload is blank</em>. It is a
+    whitelist wearing a forest costume.</p>
+  </div>
+
+  <h3 style="margin-top:34px">Training on the hardest case fixes it</h3>
+  <p>The eight-comparator model, scored against every attack including one
+  recorded eleven days earlier on a different drive.</p>
+  <div class="tw panel">
+    <table>
+      <thead><tr><th>Evaluated against</th><th>Accuracy</th><th>Recall</th>
+        <th>False alarms</th><th>Missed</th><th class="pill-cell">Verdict</th></tr></thead>
+      <tbody id="xb"></tbody>
+    </table>
+  </div>
+  <p style="margin-top:14px">Nine fewer comparators than the perfect-scoring
+  model, and the only one of the two that survives an attacker who has read the
+  paper. The last row also shows the per-ID baseline transferring across drives
+  with <strong>zero false alarms in 3.07 million normal frames</strong>.</p>
+</section>
+
+<section>
+  <h2>The rules</h2>
+  <h3>What the eight comparators actually test</h3>
+  <p><span class="mono">id_rate</span> is a sustained-rate estimate where
+  <strong>64 means the ID is running at its normal rate</strong>.
+  <span class="mono">dt_ratio_q6</span> is the current gap as a fraction of that
+  ID's normal gap, where <strong>64 means exactly on schedule</strong>. A frame
+  is flagged when 2 of the 3 trees vote attack.</p>
+  <div class="trees" id="tr"></div>
+  <div class="note">
+    <p>Trees 1 and 2 catch a blank payload arriving far too early. Tree 0 catches
+    a flood on timing and rate alone, without looking at the payload at all.
+    Tree 0 is why the forest still works when the attacker replays valid
+    payloads.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Residual error</h2>
+  <h3>Every mistake lands on the flooded ID</h3>
+  <p>On the stealth flood of ID <span class="mono">0x2c0</span>, with the other
+  26 IDs classified perfectly:</p>
+  <div class="tiles">
+    <div class="tile"><div class="k">False alarms on 0x2c0</div>
+      <div class="v">2421</div><div class="s">of its 22 160 real frames</div></div>
+    <div class="tile"><div class="k">False alarms elsewhere</div>
+      <div class="v">0</div><div class="s">across the other 26 IDs</div></div>
+    <div class="tile"><div class="k">Missed attacks</div>
+      <div class="v">5</div><div class="s">all on 0x2c0</div></div>
+  </div>
+  <p style="margin-top:16px">This is a property of the problem, not the model.
+  During a flood, the victim's own frames arrive at the flood period like
+  everything else carrying that ID, so they are genuinely ambiguous frame by
+  frame. More trees do not move it. A verdict at the
+  <em>(ID, time window)</em> level would, which is what a node-exclusion system
+  wants anyway.</p>
+</section>
+
+<section>
+  <h2>Independent check</h2>
+  <h3>A second dataset, different vehicle model, different format</h3>
+  <p>SynCAN (ETAS / Robert Bosch) is an unrelated CAN IDS benchmark. Its
+  <span class="mono">test_flooding</span> set is a DoS on an existing ID. It is
+  signal-level rather than raw payload bytes, so only the timing and rate
+  features transfer, and it labels every ID inside an attacked window rather
+  than only the injected frames.</p>
+  <div class="tw panel">
+    <table>
+      <thead><tr><th>Feature set</th><th>Best accuracy</th><th>Recall</th>
+        <th>Comparators</th></tr></thead>
+      <tbody id="sy"></tbody>
+    </table>
+  </div>
+  <p style="margin-top:14px" id="syline"></p>
+</section>
+
+<section>
+  <h2>Every measurement</h2>
+  <details open>
+    <summary>Full front table, all datasets and feature sets</summary>
+    <div class="tw" style="margin-top:14px"><table>
+      <thead><tr><th>Dataset</th><th>Feature set</th><th>Trees</th>
+        <th>Comparators</th><th>Accuracy</th><th>Recall</th>
+        <th>False alarms</th><th>Missed</th></tr></thead>
+      <tbody id="all"></tbody>
+    </table></div>
+  </details>
+</section>
+
+<footer>
+  Held-out test slices only: train on frames 0&ndash;45 %, discard 45&ndash;55 %,
+  test on 55&ndash;100 %. Scored with the hard majority vote the frozen model
+  uses, not averaged class probabilities. Data: HCRL Car-Hacking (Song, Woo &amp;
+  Kim) and SynCAN (Hanselmann, Strauss, Dormann &amp; Ulmer, <em>CANet</em>,
+  IEEE Access 8, 2020).
+</footer>
+
+</div>
+<div class="tt" id="tt" role="status" aria-live="polite"></div>
+<script>
+const D = {"fronts":{"real":{"label":"HCRL DoS (real capture)","sets":{"timing":{"label":"all features","points":[{"n":2,"a":100.0,"r":100.0,"fp":0,"fn":0,"t":1}]},"no_rate":{"label":"without rate buckets","points":[{"n":2,"a":100.0,"r":100.0,"fp":0,"fn":0,"t":1}]},"timing_only":{"label":"without payload invariant","points":[{"n":2,"a":100.0,"r":100.0,"fp":0,"fn":0,"t":1}]},"paper":{"label":"reference paper, 2 features","points":[{"n":3,"a":93.3957,"r":72.2441,"fp":67903,"fn":41041,"t":1},{"n":5,"a":95.0091,"r":72.2441,"fp":41289,"fn":41041,"t":1},{"n":12,"a":96.2435,"r":88.2101,"fp":44534,"fn":17433,"t":1},{"n":17,"a":97.9135,"r":86.5457,"fp":14525,"fn":19894,"t":1},{"n":71,"a":98.3019,"r":93.3669,"fp":18204,"fn":9808,"t":1},{"n":202,"a":98.3036,"r":93.4474,"fp":18294,"fn":9689,"t":3},{"n":208,"a":98.3037,"r":93.4474,"fp":18293,"fn":9689,"t":3}]}}},"realatk_stealth":{"label":"real traffic + stealth flood","sets":{"timing":{"label":"all features","points":[{"n":3,"a":99.5384,"r":99.9957,"fp":2423,"fn":4,"t":1},{"n":7,"a":99.5386,"r":99.9946,"fp":2421,"fn":5,"t":3}]},"no_rate":{"label":"without rate buckets","points":[{"n":2,"a":99.5388,"r":99.9957,"fp":2421,"fn":4,"t":1}]},"timing_only":{"label":"without payload invariant","points":[{"n":3,"a":99.5384,"r":99.9957,"fp":2423,"fn":4,"t":1},{"n":8,"a":99.5386,"r":99.9946,"fp":2421,"fn":5,"t":3}]},"paper":{"label":"reference paper, 2 features","points":[{"n":3,"a":99.2032,"r":99.9946,"fp":4184,"fn":5,"t":1},{"n":5,"a":99.3784,"r":99.9946,"fp":3263,"fn":5,"t":1},{"n":10,"a":99.5184,"r":99.9946,"fp":2527,"fn":5,"t":1},{"n":12,"a":99.5386,"r":99.9946,"fp":2421,"fn":5,"t":1}]}}},"realatk_valid-id":{"label":"real traffic + valid-ID flood","sets":{"timing":{"label":"all features","points":[{"n":1,"a":95.1044,"r":100.0,"fp":25739,"fn":0,"t":1},{"n":5,"a":99.9996,"r":99.9979,"fp":0,"fn":2,"t":3}]},"no_rate":{"label":"without rate buckets","points":[{"n":1,"a":95.1044,"r":100.0,"fp":25739,"fn":0,"t":1},{"n":2,"a":99.999,"r":100.0,"fp":5,"fn":0,"t":1}]},"timing_only":{"label":"without payload invariant","points":[{"n":3,"a":99.539,"r":97.4062,"fp":0,"fn":2424,"t":1},{"n":5,"a":99.6559,"r":99.5367,"fp":1376,"fn":433,"t":1},{"n":8,"a":99.6637,"r":99.7903,"fp":1572,"fn":196,"t":1},{"n":14,"a":99.6677,"r":99.5998,"fp":1373,"fn":374,"t":1},{"n":33,"a":99.6721,"r":99.5442,"fp":1298,"fn":426,"t":1}]},"paper":{"label":"reference paper, 2 features","points":[{"n":3,"a":99.2032,"r":99.9946,"fp":4184,"fn":5,"t":1},{"n":5,"a":99.3786,"r":97.4062,"fp":843,"fn":2424,"t":1},{"n":11,"a":99.5186,"r":97.4062,"fp":107,"fn":2424,"t":1},{"n":13,"a":99.5196,"r":99.9946,"fp":2521,"fn":5,"t":1},{"n":14,"a":99.5243,"r":97.6587,"fp":313,"fn":2188,"t":1},{"n":16,"a":99.5445,"r":97.6587,"fp":207,"fn":2188,"t":1},{"n":58,"a":99.5469,"r":97.6587,"fp":194,"fn":2188,"t":3}]}}},"realatk_zero-id":{"label":"real traffic + 0x000 flood","sets":{"timing":{"label":"all features","points":[{"n":1,"a":100.0,"r":100.0,"fp":0,"fn":0,"t":1}]},"no_rate":{"label":"without rate buckets","points":[{"n":1,"a":100.0,"r":100.0,"fp":0,"fn":0,"t":1}]},"timing_only":{"label":"without payload invariant","points":[{"n":1,"a":100.0,"r":100.0,"fp":0,"fn":0,"t":1}]},"paper":{"label":"reference paper, 2 features","points":[{"n":2,"a":82.2251,"r":0.0,"fp":0,"fn":93453,"t":1},{"n":3,"a":95.4793,"r":99.0498,"fp":22880,"fn":888,"t":1},{"n":6,"a":97.7798,"r":97.5153,"fp":9351,"fn":2322,"t":1},{"n":8,"a":97.9898,"r":88.9057,"fp":201,"fn":10368,"t":1},{"n":10,"a":99.2789,"r":96.2698,"fp":305,"fn":3486,"t":1}]}}},"syncan_flooding":{"label":"SynCAN flooding (independent)","sets":{"no_payload":{"label":"timing and rate only","points":[{"n":3,"a":96.3243,"r":94.5168,"fp":24090,"fn":18515,"t":1},{"n":7,"a":96.534,"r":93.5748,"fp":18479,"fn":21696,"t":1},{"n":14,"a":96.5561,"r":94.6279,"fp":21779,"fn":18140,"t":1},{"n":21,"a":96.7388,"r":92.0262,"fp":10876,"fn":26925,"t":3},{"n":26,"a":96.8267,"r":90.7581,"fp":5575,"fn":31207,"t":1},{"n":48,"a":97.0927,"r":93.8372,"fp":12889,"fn":20810,"t":1},{"n":142,"a":97.1059,"r":93.7794,"fp":12541,"fn":21005,"t":3},{"n":234,"a":97.1084,"r":93.8215,"fp":12654,"fn":20863,"t":5},{"n":508,"a":97.1126,"r":92.5317,"fp":8250,"fn":25218,"t":5}]},"timing":{"label":"all features","points":[{"n":3,"a":96.3243,"r":94.5168,"fp":24090,"fn":18515,"t":1},{"n":9,"a":96.3244,"r":94.5153,"fp":24084,"fn":18520,"t":3},{"n":14,"a":96.556,"r":94.6276,"fp":21779,"fn":18141,"t":1},{"n":26,"a":96.8265,"r":90.7575,"fp":5575,"fn":31209,"t":1},{"n":48,"a":97.0928,"r":93.8375,"fp":12889,"fn":20809,"t":1},{"n":140,"a":97.0941,"r":93.8084,"fp":12776,"fn":20907,"t":3},{"n":231,"a":97.1019,"r":93.8336,"fp":12770,"fn":20822,"t":5},{"n":420,"a":97.1062,"r":93.8007,"fp":12609,"fn":20933,"t":9}]},"paper":{"label":"reference paper, 2 features","points":[{"n":3,"a":88.2181,"r":59.5634,"fp":23,"fn":136542,"t":1},{"n":9,"a":88.2182,"r":59.564,"fp":24,"fn":136540,"t":3}]}}}},"models":{"real":{"label":"HCRL DoS (real capture)","trees":7,"nodes":19,"depth":3,"features":["dt_id","dt_id_dev","dt_ratio_q6","dt_bus","burst","pl_popcount","id_rate"],"metrics":{"accuracy":1.0,"recall":1.0,"precision":1.0,"fp":0,"fn":0,"tp":147864,"tn":1501733},"tree_tables":[{"feature":[10,0,0],"threshold":[143,0,0],"left":[1,0,0],"right":[2,0,0],"is_leaf":[0,1,1],"value":[0,0,1],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},{"feature":[9,10,0,0,0],"threshold":[0,75,0,0,0],"left":[1,2,0,0,0],"right":[4,3,0,0,0],"is_leaf":[0,0,1,1,1],"value":[0,0,0,1,0],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},{"feature":[9,5,10,0,0,2,0,0,0],"threshold":[0,251,90,0,0,22,0,0,0],"left":[1,2,3,0,0,6,0,0,0],"right":[8,5,4,0,0,7,0,0,0],"is_leaf":[0,0,0,1,1,0,1,1,1],"value":[0,0,0,0,1,0,1,0,0],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},{"feature":[0,0,0,10,0,0,2,0,0],"threshold":[6627,1480,0,399,0,0,3,0,0],"left":[1,2,0,4,0,0,7,0,0],"right":[6,3,0,5,0,0,8,0,0],"is_leaf":[0,0,1,0,1,1,0,1,1],"value":[0,0,1,0,0,1,0,1,0],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},{"feature":[10,0,0],"threshold":[143,0,0],"left":[1,0,0],"right":[2,0,0],"is_leaf":[0,1,1],"value":[0,0,1],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},{"feature":[0,1,2,0,0,9,0,0,6,0,1,0,0],"threshold":[6627,6497,11,0,0,0,0,0,0,0,5003,0,0],"left":[1,2,3,0,0,6,0,0,9,0,11,0,0],"right":[8,5,4,0,0,7,0,0,10,0,12,0,0],"is_leaf":[0,0,0,1,1,0,1,1,0,1,0,1,1],"value":[0,0,0,1,0,0,1,0,0,0,0,0,1],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},{"feature":[2,0,0],"threshold":[0,0,0],"left":[1,0,0],"right":[2,0,0],"is_leaf":[0,1,1],"value":[0,1,0],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]}],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},"realatk_stealth":{"label":"real traffic + stealth flood","trees":3,"nodes":8,"depth":3,"features":["dt_id","dt_id_dev","dt_ratio_q6","burst","pl_popcount","id_rate"],"metrics":{"accuracy":0.9953857097752198,"recall":0.9999464971697003,"precision":0.9747467898903712,"fp":2421,"fn":5,"tp":93448,"tn":429884},"tree_tables":[{"feature":[10,2,0,0,6,1,0,0,0],"threshold":[288,12,0,0,0,8289,0,0,0],"left":[1,2,0,0,5,6,0,0,0],"right":[4,3,0,0,8,7,0,0,0],"is_leaf":[0,0,1,1,0,0,1,1,1],"value":[0,0,1,0,0,0,0,1,1],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},{"feature":[9,0,0,0,0],"threshold":[2,1310,0,0,0],"left":[1,2,0,0,0],"right":[4,3,0,0,0],"is_leaf":[0,0,1,1,1],"value":[0,0,1,0,0],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},{"feature":[9,2,0,0,0],"threshold":[2,9,0,0,0],"left":[1,2,0,0,0],"right":[4,3,0,0,0],"is_leaf":[0,0,1,1,1],"value":[0,0,1,0,0],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]}],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","hd","hd_dev","dt_bus","burst","dlc","pl_violation","pl_popcount","id_rate","bus_rate"]},"syncan_flooding":{"label":"SynCAN flooding (independent)","trees":3,"nodes":8,"depth":3,"features":["dt_id","dt_id_dev","dt_ratio_q6","dt_bus","burst","bus_rate"],"metrics":{"accuracy":0.967387937824764,"recall":0.92026215021219,"precision":0.9661836950438406,"fp":10876,"fn":26925,"tp":310744,"tn":810566},"tree_tables":[{"feature":[4,7,1,0,0,0,0],"threshold":[0,77,4553,0,0,0,0],"left":[1,2,3,0,0,0,0],"right":[6,5,4,0,0,0,0],"is_leaf":[0,0,0,1,1,1,1],"value":[0,0,0,0,1,1,1],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","dt_bus","burst","dlc","id_rate","bus_rate"]},{"feature":[2,0,0],"threshold":[40,0,0],"left":[1,0,0],"right":[2,0,0],"is_leaf":[0,1,1],"value":[0,1,0],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","dt_bus","burst","dlc","id_rate","bus_rate"]},{"feature":[0,0,3,7,0,0,7,0,0],"threshold":[12136,0,1521,81,0,0,67,0,0],"left":[1,0,3,4,0,0,7,0,0],"right":[2,0,6,5,0,0,8,0,0],"is_leaf":[0,1,0,0,1,1,0,1,1],"value":[0,1,0,0,0,1,0,0,1],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","dt_bus","burst","dlc","id_rate","bus_rate"]}],"feature_names":["dt_id","dt_id_dev","dt_ratio_q6","dt_bus","burst","dlc","id_rate","bus_rate"]}},"cross":{"cross_eval_from_real":[{"trace":"REAL DoS (trained on this)","accuracy":1.0,"precision":1.0,"recall":1.0,"f1":1.0,"fpr":0.0,"tp":147864,"tn":1501733,"fp":0,"fn":0},{"trace":"zero-id on clean drive","accuracy":0.9579274114706766,"precision":0.8086058162373565,"recall":1.0,"f1":0.8941758441533589,"fpr":0.051167578445773236,"tp":93453,"tn":410185,"fp":22120,"fn":0},{"trace":"valid-id flood","accuracy":0.9579179013918951,"precision":0.8085975356500069,"recall":0.9999464971697003,"f1":0.8941493916879165,"fpr":0.051167578445773236,"tp":93448,"tn":410185,"fp":22120,"fn":5},{"trace":"stealth flood","accuracy":0.7801783329973105,"precision":0.0,"recall":0.0,"f1":0.0,"fpr":0.051167578445773236,"tp":0,"tn":410185,"fp":22120,"fn":93453}],"cross_eval_real":[{"trace":"zero-id flood","accuracy":1.0,"precision":1.0,"recall":1.0,"f1":1.0,"fpr":0.0,"tp":93453,"tn":432305,"fp":0,"fn":0},{"trace":"valid-id flood","accuracy":0.9953857097752198,"precision":0.9747467898903712,"recall":0.9999464971697003,"f1":0.9871858526742798,"fpr":0.005600212812713247,"tp":93448,"tn":429884,"fp":2421,"fn":5},{"trace":"stealth flood","accuracy":0.9953857097752198,"precision":0.9747467898903712,"recall":0.9999464971697003,"f1":0.9871858526742798,"fpr":0.005600212812713247,"tp":93448,"tn":429884,"fp":2421,"fn":5},{"trace":"REAL DoS capture","accuracy":0.9940846158182878,"precision":1.0,"recall":0.9340069252826922,"f1":0.9658775396020561,"fpr":0.0,"tp":138106,"tn":1501733,"fp":0,"fn":9758}]}};
+const SERIES = ["--s1","--s2","--s3"];
+const cssv = n => getComputedStyle(document.documentElement)
+  .getPropertyValue(n).trim() || "#888";
+const fmt = v => v.toFixed(v >= 99.9 ? 4 : 2) + " %";
+const int = v => v.toLocaleString("en-US");
+
+/* ---------- headline tiles ---------- */
+const M = D.models["realatk_stealth"];
+document.getElementById("tiles").innerHTML = [
+  ["Comparators", M.nodes, M.trees + " trees, depth " + M.depth],
+  ["Recall", fmt(M.metrics.recall * 100), int(M.metrics.fn) + " attacks missed"],
+  ["Precision", fmt(M.metrics.precision * 100), int(M.metrics.fp) + " false alarms"],
+  ["Accuracy", fmt(M.metrics.accuracy * 100),
+   int(M.metrics.tp + M.metrics.tn + M.metrics.fp + M.metrics.fn) + " frames tested"],
+].map(([k, v, s]) =>
+  `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>
+   <div class="s">${s}</div></div>`).join("");
+
+/* ---------- line chart: accuracy vs comparators ---------- */
+const tt = document.getElementById("tt");
+function showTip(html, x, y) {
+  tt.innerHTML = html; tt.style.opacity = 1;
+  const r = tt.getBoundingClientRect();
+  tt.style.left = Math.min(Math.max(8, x - r.width / 2),
+                           innerWidth - r.width - 8) + "px";
+  tt.style.top = Math.max(8, y - r.height - 14) + "px";
+}
+const hideTip = () => { tt.style.opacity = 0; };
+
+const ABBR = {
+  "all features": "all",
+  "without rate buckets": "no rate",
+  "without payload invariant": "no payload inv",
+  "timing and rate only": "timing+rate",
+  "reference paper, 2 features": "paper, 2 feat",
+};
+const ORDER = ["real", "realatk_zero-id", "realatk_valid-id",
+               "realatk_stealth", "syncan_flooding"];
+const SHORT = {
+  "real": "HCRL DoS",
+  "realatk_zero-id": "0x000 flood",
+  "realatk_valid-id": "valid-ID flood",
+  "realatk_stealth": "stealth flood",
+  "syncan_flooding": "SynCAN",
+};
+let active = "realatk_stealth";
+
+const dsBox = document.getElementById("ds");
+dsBox.innerHTML = ORDER.filter(k => D.fronts[k]).map(k =>
+  `<button class="chip" type="button" data-k="${k}"
+    aria-pressed="${k === active}">${SHORT[k]}</button>`).join("");
+dsBox.addEventListener("click", e => {
+  const b = e.target.closest("button[data-k]"); if (!b) return;
+  active = b.dataset.k;
+  [...dsBox.querySelectorAll("button")].forEach(x =>
+    x.setAttribute("aria-pressed", x.dataset.k === active));
+  draw();
+});
+
+function draw() {
+  const f = D.fronts[active];
+  const sets = Object.entries(f.sets)
+    .filter(([, v]) => v.points.length)
+    .sort((a, b) => b[1].points.length - a[1].points.length)
+    .slice(0, 3);
+
+  document.getElementById("lg").innerHTML = sets.map(([, v], i) =>
+    `<span><i class="sw" style="background:${cssv(SERIES[i])}"></i>${v.label}</span>`
+  ).join("");
+
+  const all = sets.flatMap(([, v]) => v.points);
+  const W = 760, H = 340, L = 56, R = 132, T = 18, B = 46;
+  const iw = W - L - R, ih = H - T - B;
+  const maxN = Math.max(...all.map(p => p.n), 4);
+  let lo = Math.min(...all.map(p => p.a)), hi = Math.max(...all.map(p => p.a));
+  const pad = Math.max((hi - lo) * 0.18, 0.06);
+  lo = Math.max(0, lo - pad); hi = Math.min(100, hi + pad);
+
+  const X = n => L + (Math.log10(Math.max(n, 1)) / Math.log10(maxN * 1.35)) * iw;
+  const Y = a => T + ih - ((a - lo) / (hi - lo)) * ih;
+
+  const ticksX = [1, 2, 5, 10, 25, 50, 100, 250, 500].filter(t => t <= maxN * 1.2);
+  const nT = 5;
+  const ticksY = Array.from({length: nT}, (_, i) => lo + (hi - lo) * i / (nT - 1));
+
+  let s = "";
+  ticksY.forEach(v => {
+    s += `<line x1="${L}" y1="${Y(v).toFixed(1)}" x2="${L + iw}" y2="${Y(v).toFixed(1)}"
+      stroke="${cssv('--grid')}" stroke-width="1"/>`;
+    s += `<text x="${L - 10}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end"
+      font-size="11.5" fill="${cssv('--muted')}"
+      font-family="${cssv('--sans')}">${v.toFixed(2)}</text>`;
+  });
+  s += `<line x1="${L}" y1="${T + ih}" x2="${L + iw}" y2="${T + ih}"
+    stroke="${cssv('--axis')}" stroke-width="1"/>`;
+  ticksX.forEach(t => {
+    s += `<text x="${X(t).toFixed(1)}" y="${T + ih + 20}" text-anchor="middle"
+      font-size="11.5" fill="${cssv('--muted')}"
+      font-family="${cssv('--sans')}">${t}</text>`;
+  });
+  s += `<text x="${L + iw / 2}" y="${H - 6}" text-anchor="middle" font-size="11.5"
+    fill="${cssv('--muted')}" font-family="${cssv('--sans')}">comparator nodes (log)</text>`;
+  s += `<text x="${L - 10}" y="${T - 4}" text-anchor="end" font-size="11"
+    fill="${cssv('--muted')}" font-family="${cssv('--sans')}">accuracy %</text>`;
+
+  const labels = [];
+  sets.forEach(([, v], i) => {
+    const c = cssv(SERIES[i]);
+    const pts = v.points.slice().sort((a, b) => a.n - b.n);
+    const dAttr = pts.map((p, j) =>
+      `${j ? "L" : "M"}${X(p.n).toFixed(1)} ${Y(p.a).toFixed(1)}`).join(" ");
+    s += `<path d="${dAttr}" fill="none" stroke="${c}" stroke-width="2"
+      stroke-linejoin="round" stroke-linecap="round"/>`;
+    pts.forEach(p => {
+      s += `<circle cx="${X(p.n).toFixed(1)}" cy="${Y(p.a).toFixed(1)}" r="4.5"
+        fill="${c}" stroke="${cssv('--surface')}" stroke-width="2"
+        data-t="${encodeURIComponent(v.label)}" data-n="${p.n}" data-a="${p.a}"
+        data-r="${p.r}" data-fp="${p.fp}" data-fn="${p.fn}" data-tr="${p.t}"
+        style="cursor:crosshair"/>`;
+    });
+    const last = pts[pts.length - 1];
+    labels.push({ x: X(last.n) + 11, y: Y(last.a), c,
+                  text: ABBR[v.label] || v.label });
+  });
+
+  // push labels apart so they never overlap, then keep them inside the box
+  labels.sort((a, b) => a.y - b.y);
+  const GAP = 16;
+  for (let i = 1; i < labels.length; i++) {
+    if (labels[i].y - labels[i - 1].y < GAP)
+      labels[i].y = labels[i - 1].y + GAP;
+  }
+  const overflow = labels.length
+    ? Math.max(0, labels[labels.length - 1].y - (T + ih)) : 0;
+  labels.forEach(l => {
+    const y = l.y - overflow;
+    s += `<text x="${l.x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="12"
+      font-weight="600" fill="${l.c}"
+      font-family="${cssv('--sans')}">${l.text}</text>`;
+  });
+
+  const svg = document.getElementById("c1");
+  svg.innerHTML = s;
+  svg.querySelectorAll("circle").forEach(el => {
+    const over = e => {
+      const d = el.dataset, b = el.getBoundingClientRect();
+      showTip(`<b>${decodeURIComponent(d.t)}</b><br>
+        ${d.tr} trees · ${d.n} comparator${d.n === "1" ? "" : "s"}<br>
+        accuracy <b>${(+d.a).toFixed(4)} %</b><br>
+        recall <b>${(+d.r).toFixed(4)} %</b><br>
+        ${int(+d.fp)} false alarms · ${int(+d.fn)} missed`,
+        b.left + b.width / 2, b.top);
+    };
+    el.addEventListener("pointerenter", over);
+    el.addEventListener("pointermove", over);
+    el.addEventListener("pointerleave", hideTip);
+  });
+
+  const front = Object.values(f.sets)[0].points;
+  const small = front[0], big = front[front.length - 1];
+  document.getElementById("cap1").textContent =
+    `${f.label}. Smallest point ${small.n} comparator` +
+    (small.n === 1 ? "" : "s") + ` at ${small.a.toFixed(4)} %` +
+    (big.n !== small.n
+      ? `; largest ${big.n} at ${big.a.toFixed(4)} %, a gain of ` +
+        `${(big.a - small.a).toFixed(4)} points for ${big.n - small.n} more comparators.`
+      : `, and nothing larger improves on it.`);
+}
+
+/* ---------- cross-evaluation tables ---------- */
+function xrow(r) {
+  const rec = r.recall * 100, dead = rec < 1;
+  return `<tr class="${dead ? "flag" : ""}">
+    <td>${r.trace}</td>
+    <td>${fmt(r.accuracy * 100)}</td>
+    <td>${fmt(rec)}</td>
+    <td>${int(r.fp)}</td><td>${int(r.fn)}</td>
+    <td class="pill-cell"><span class="pill ${dead ? "no" : "ok"}">
+      ${dead ? "blind" : rec > 99 ? "catches it" : "degrades"}</span></td></tr>`;
+}
+document.getElementById("xa").innerHTML =
+  D.cross.cross_eval_from_real.map(xrow).join("");
+document.getElementById("xb").innerHTML =
+  D.cross.cross_eval_real.map(xrow).join("");
+
+/* ---------- SynCAN table, driven by the data ---------- */
+(function () {
+  const f = D.fronts["syncan_flooding"], SM = D.models["syncan_flooding"];
+  if (!f) return;
+  const rows = [];
+  // best point per feature set, worst-performing set last so it reads as a fall
+  const best = Object.entries(f.sets)
+    .filter(([, v]) => v.points.length)
+    .map(([, v]) => {
+      const b = v.points.reduce((a, p) => (p.a > a.a ? p : a), v.points[0]);
+      return { label: v.label, ...b };
+    })
+    .sort((a, b) => b.a - a.a);
+
+  best.forEach(b => {
+    const weak = b.r < 75;
+    rows.push(`<tr class="${weak ? "flag" : ""}">
+      <td>${b.label}</td><td>${b.a.toFixed(2)} %</td>
+      <td class="${weak ? "pill-cell" : ""}">${b.r.toFixed(2)} %</td>
+      <td>${b.n}</td></tr>`);
+  });
+  if (SM) {
+    const m = SM.metrics;
+    rows.push(`<tr><td>the frozen model, after pruning</td>
+      <td>${(m.accuracy * 100).toFixed(2)} %</td>
+      <td>${(m.recall * 100).toFixed(2)} %</td>
+      <td>${SM.nodes}</td></tr>`);
+  }
+  document.getElementById("sy").innerHTML = rows.join("");
+
+  const top = best[0], bottom = best[best.length - 1];
+  const lost = (100 - bottom.r).toFixed(0);
+  document.getElementById("syline").innerHTML =
+    `The reference design's two features lose <strong>${lost} % of all
+     attacks</strong> on data they were not tuned for, at
+     ${bottom.r.toFixed(2)} % recall. The ${top.label} set holds
+     ${top.r.toFixed(2)} %` +
+    (SM ? `, and the frozen ${SM.trees}-tree model keeps
+     ${(SM.metrics.recall * 100).toFixed(2)} % on just ${SM.nodes}
+     comparators` : "") +
+    `. That gap is the case for the extra features, measured on a dataset
+     neither design was built against.`;
+})();
+
+/* ---------- render the trees ---------- */
+const UNITS = {
+  dt_id: "us since this ID's last frame",
+  dt_id_dev: "us away from its normal gap",
+  dt_ratio_q6: "64 = on schedule",
+  hd: "payload bits changed",
+  hd_dev: "bits away from normal change",
+  dt_bus: "us since any frame",
+  burst: "same-ID frames in a row",
+  dlc: "bytes",
+  pl_violation: "bits breaking the ID's pattern",
+  pl_popcount: "payload bits set",
+  id_rate: "64 = normal rate",
+  bus_rate: "64 = normal bus rate",
+};
+function renderTree(t, names) {
+  const out = [];
+  (function walk(n, depth, lead) {
+    const pad = "  ".repeat(depth);
+    if (t.is_leaf[n]) {
+      const a = t.value[n] === 1;
+      out.push(pad + lead + `<span class="${a ? "A" : "N"}">` +
+               (a ? "ATTACK" : "normal") + "</span>");
+      return;
+    }
+    const f = names[t.feature[n]];
+    out.push(pad + lead + `<span class="f">${f}</span> &le; ${t.threshold[n]}` +
+             `   <span style="opacity:.62">${UNITS[f] || ""}</span>`);
+    walk(t.left[n], depth + 1, "yes  ");
+    walk(t.right[n], depth + 1, "no   ");
+  })(0, 0, "");
+  return out.join("\n");
+}
+document.getElementById("tr").innerHTML = M.tree_tables.map((t, i) => {
+  const n = t.is_leaf.filter(x => !x).length;
+  return `<div class="tree"><div class="cap">Tree ${i} &middot; ${n} comparator${
+    n === 1 ? "" : "s"}</div><pre>${renderTree(t, M.feature_names)}</pre></div>`;
+}).join("");
+
+/* ---------- the full table ---------- */
+document.getElementById("all").innerHTML = ORDER.filter(k => D.fronts[k])
+  .flatMap(k => Object.entries(D.fronts[k].sets).flatMap(([, v]) =>
+    v.points.map(p => `<tr><td>${SHORT[k]}</td><td>${v.label}</td>
+      <td>${p.t}</td><td>${p.n}</td><td>${p.a.toFixed(4)}</td>
+      <td>${p.r.toFixed(4)}</td><td>${int(p.fp)}</td><td>${int(p.fn)}</td></tr>`)))
+  .join("");
+
+draw();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+</script>
