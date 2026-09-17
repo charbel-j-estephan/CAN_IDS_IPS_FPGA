@@ -126,12 +126,12 @@
   "n_features_used": 2
  },
  "calibration": {
-  "clean_frames": 988871,
+  "clean_frames": 444992,
   "id_rate_clean_max": 71,
   "id_rate_threshold": 80,
   "dt_ratio_clean_min": 32,
   "dt_ratio_threshold": 39,
-  "dt_ratio_clean_below_threshold": 105,
+  "dt_ratio_clean_below_threshold": 74,
   "rate_margin": 1.12,
   "ratio_quantile": 0.01,
   "trained_on_attacks": false

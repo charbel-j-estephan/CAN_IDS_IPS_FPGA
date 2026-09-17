@@ -27,8 +27,10 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
-from can_data import load_hcrl_csv, load_hcrl_normal_txt         # noqa: E402
+from can_data import (load_hcrl_csv, load_hcrl_normal_txt,       # noqa: E402
+                      truncate)
 from features import extract, fit_baseline                       # noqa: E402
+from prepare import TRAIN_SPAN                                   # noqa: E402
 
 
 def write_baseline(baseline, path: str) -> None:
@@ -52,6 +54,11 @@ def main() -> None:
                          "normal_run_data format, .csv is the HCRL CSV "
                          "format with every row marked R")
     ap.add_argument("--out-dir", default="results/detector")
+    ap.add_argument("--span", default="train",
+                    help="'train' calibrates on the same leading slice the "
+                         "trained models use, leaving the later slice held "
+                         "out. 'all' uses the whole capture, which leaks into "
+                         "any test trace built over it.")
     ap.add_argument("--rate-margin", type=float, default=1.12)
     ap.add_argument("--ratio-quantile", type=float, default=0.01)
     args = ap.parse_args()
@@ -68,8 +75,16 @@ def main() -> None:
             f"because the thresholds are set from what normal traffic does."
         )
 
+    full = len(clean)
+    if args.span == "train":
+        # The synthetic test traces are built over the LATER part of this same
+        # capture, so calibrating on all of it would be calibrating on the
+        # traffic under test. Use the same leading slice the trained models
+        # train on and leave the rest genuinely held out.
+        clean = truncate(clean, *TRAIN_SPAN)
     span = float(clean["timestamp"].iloc[-1] - clean["timestamp"].iloc[0])
-    print(f"clean capture  {len(clean)} frames over {span / 60:.1f} min, "
+    print(f"clean capture  {len(clean)} of {full} frames "
+          f"({args.span} span) over {span / 60:.1f} min, "
           f"{clean['can_id'].nunique()} CAN IDs")
 
     baseline = fit_baseline(clean)

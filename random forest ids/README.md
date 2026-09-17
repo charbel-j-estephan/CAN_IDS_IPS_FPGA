@@ -1,634 +1,409 @@
-# Random forest CAN IDS
+# A CAN flood detector in three comparators
 
-Per-frame intrusion detection on a CAN bus. The flow goes from a raw HCRL
-car-hacking CSV to a small, frozen random forest whose decision logic you can
-read.
+Per-frame intrusion detection for a CAN bus, sized for an FPGA. The goal was a
+verdict on every frame inside 1 ms with small trees and high accuracy, using a
+truncation of the HCRL DoS capture to train and a disjoint truncation to test.
 
-The models are deliberately tiny and every feature is an integer, so this
-stays portable to a hardware implementation later. The Verilog that did that
-was removed on request to keep the project focused on the models; see
-[Recovering the RTL](#recovering-the-rtl) if it is wanted back.
+What it ended up as is smaller than a random forest, and the route there is
+more useful than the destination, so both are written down.
 
-## The dataset
+## What ships
 
-The real HCRL `DoS_dataset.csv` is in `data/DoS_real.csv`, verified against the
-published figures:
+```
+flag a frame when  id_rate > 80  OR  dt_ratio_q6 <= 39
+```
 
-| | expected | loaded |
-|---|---|---|
-| frames | 3 665 771 | 3 665 771 |
-| injected | 587 521 | 587 521 |
-| normal | 3 078 250 | 3 078 250 |
-| injected share | 16.03 % | 16.03 % |
-| duration | — | 2832.7 s |
-| unique IDs | — | 27 |
+Three comparator nodes across three depth-1 trees, two features, **calibrated
+on attack-free traffic with no attack data of any kind**. Both features are
+scale-free: `id_rate` is that ID's sustained rate where 64 means its normal
+rate, and `dt_ratio_q6` is the current gap as 64ths of its normal gap. So a
+threshold set on a 10 ms ID means the same thing on a 1 s ID, and on a
+different vehicle.
 
-The flood uses CAN ID `0x000` with an all-zero payload, as documented. Two
-format details the loader handles that are easy to get wrong: the file has CRLF
-line endings, and rows with DLC below 8 are shorter, so the `R`/`T` flag does
-not sit in a fixed column.
+Above it sits a per-ID leaky integrator. A flagged frame adds 1 to that ID's
+score, the score decays with elapsed time, and the ID alarms at 2. That layer
+is what makes the per-frame residual irrelevant: the detector flags 10 486
+clean frames across an hour of traffic and raises **zero** false alarms,
+because those flags are scattered singles that decay before the next one
+arrives.
 
-`data/normal_run_data.txt` is HCRL's separate attack-free capture, 988 871
-frames in a different whitespace-separated layout, read by
-`load_hcrl_normal_txt`.
-
-### A second, independent dataset
-
-`src/syncan_data.py` reads the **SynCAN** benchmark (ETAS GmbH / Robert Bosch),
-whose `test_flooding` set is a DoS on a legitimate ID. It is a different vehicle
-model, a different format and a different research group, so it is the closest
-thing here to an out-of-sample test.
-
-    Hanselmann, Strauss, Dormann, Ulmer, "CANet: An Unsupervised Intrusion
-    Detection System for High Dimensional CAN Bus Data", IEEE Access 8, 2020.
-    https://github.com/etas/SynCAN
-
-Two differences change what it can measure. It gives **signal values, not
-payload bytes**, so a payload is reconstructed by quantising each signal to 16
-bits; prefer the `no_payload` feature set there and treat anything
-payload-derived as describing the reconstruction. And it labels **every ID
-inside an attacked window**, not only the injected frames, so its labels answer
-"is the bus under attack now" rather than "was this frame injected".
-
-Its licence permits academic and non-commercial research and requires citation
-but **forbids redistributing the data**, so the CSVs stay out of this repo.
-Fetch it yourself:
+Build it from one clean capture:
 
 ```bash
-git clone --depth 1 https://github.com/etas/SynCAN /tmp/syncan
-cd /tmp/syncan && unzip -q test_flooding.zip
-python3 src/prepare.py --csv /tmp/syncan/test_flooding.csv --format syncan \
-    --out results/syncan/cache.npz --baseline-out results/syncan/baseline.json
+python3 src/build_detector.py --clean data/normal_run_data.txt
 ```
 
-Generated traces from `src/make_trace.py` are kept as `data/synth_*.csv`. They
-are used for the adaptive-attacker analysis below, which the real DoS capture
-cannot exercise because it only contains the one crude attack.
-
-To rerun everything on the real file:
-
-```bash
-./run_all.sh data/DoS_real.csv real
-```
-
-## How the data is split
-
-Two disjoint contiguous truncations with a discarded gap between them:
-
-```
-frames  [0 %, 45 %)   train
-        [45 %, 55 %)  discarded
-        [55 %, 100 %) test
-```
-
-Contiguous, not random. Every feature is sequential, so a random row split would
-put the immediate neighbours of each test frame into training. The gap stops the
-per-ID state carrying across the boundary. The per-ID baseline is fitted on
-clean frames from the training truncation only.
-
-## Features
-
-Fourteen integers, all computable in one streaming pass from a small amount of
-state kept per CAN ID.
-
-| # | feature | what it is |
-|---|---|---|
-| 0 | `dt_id` | microseconds since the previous frame of this ID |
-| 1 | `dt_id_dev` | `abs(dt_id - mean_interval)` for this ID |
-| 2 | `dt_ratio_q6` | `dt_id / mean_interval` in 1/64 steps, 64 means exactly on period |
-| 3 | `hd` | Hamming distance to the previous payload of this ID |
-| 4 | `hd_dev` | `abs(hd - mean_hamming)` for this ID |
-| 5 | `dt_bus` | microseconds since the previous frame on the bus |
-| 6 | `burst` | run length of consecutive frames sharing this ID |
-| 7 | `id_known` | 1 if the ID appeared in clean training traffic |
-| 8 | `can_id` | the raw 11-bit identifier |
-| 9 | `dlc` | data length code |
-| 10 | `pl_violation` | payload bits that break this ID's learned invariant |
-| 11 | `pl_popcount` | population count of the raw payload |
-| 12 | `id_rate` | leaky-bucket rate estimate for this ID |
-| 13 | `bus_rate` | the same estimate for the bus as a whole |
-
-Three of these are worth explaining.
-
-**`dt_ratio_q6`** is the scale-invariant version of `dt_id_dev`. A single
-absolute-deviation threshold cannot serve a 10 ms ID and a 1000 ms ID at once,
-which is what limits the two-feature reference design. Dividing by the period
-fixes that, and it costs one multiply by a stored reciprocal rather than a
-divider: one DSP slice, one cycle.
-
-**`pl_violation`** records, per ID, which payload bits never move in clean
-traffic and what value they hold, then counts how many of those bits a frame
-flips. A frame that flips one is structurally impossible for that ID. One 64-bit
-XOR, one AND and a popcount. A bit only counts as invariant with at least 500
-clean samples behind it, otherwise a short training window invents invariants
-that do not hold and the false positive rate goes up.
-
-**`id_rate`** is an exponentially weighted rate estimate. Each frame of an ID
-adds a fixed credit and leaks a fraction of the bucket's own contents scaled by
-elapsed time, giving the fixed point `b = 4096 / dt_ratio_q6`. An ID running at
-its nominal period settles at 64; one flooded 64x over rate saturates. It needs
-one small multiply, one subtract, one add and 12 bits of state per ID.
-
-This one matters more than it looks. During a sustained flood of one ID, every
-frame carrying that ID arrives at the flood period, injected or not, so `dt_id`
-separates nothing at all for the victim ID. A bucket integrates over many frames
-and still reports that the stream is running far over rate when no single
-inter-arrival time does. Note the leak has to be proportional to the bucket's own
-contents: a fixed drain has no restoring force and random-walks to saturation on
-perfectly normal traffic, which is exactly what the first version of this feature
-did before it was measured.
-
-**Feature sets.** `full` includes `can_id` and `id_known`. `timing` drops both,
-so the model carries no identity information and still works when a flood reuses
-a legitimate ID. `timing_only` additionally drops the payload-content features,
-and `no_rate` drops the two rate buckets, so the gain from each group is
-measurable rather than asserted. `paper` is the reference design's two features,
-kept as a control.
-
-## Scoring uses a majority vote
-
-`RandomForestClassifier.predict` averages per-tree class *probabilities* and then
-takes an argmax. This project scores a hard majority vote instead: each tree
-gives one bit and the bits are counted. The two agree on shallow, cleanly separated trees and diverge once
-leaves are mixed.
-
-The two agree on shallow, cleanly separated trees and diverge once leaves are
-mixed, so the two scoring rules are not interchangeable and the reported numbers
-have to match the rule the frozen model actually uses. This was not caught by reading the code, it was caught by the assertion
-in `select_model.py` that the exported integer tables must reproduce the trained
-model exactly: on a 9-tree depth-8 forest it reported 1064 mismatches.
+`LOCAL_TEST.md` is the full local run, command by command, with the output it
+actually produced.
 
 ## Results
 
-Scored with the hardware majority voter, on the held-out test truncation.
-
-### Real HCRL DoS capture
-
-Train truncation 1 649 597 frames at 22.19 % injected, test truncation
-1 649 597 frames at 8.96 % injected. The two halves have very different attack
-densities, which is a harder test than a balanced split.
-
-| feature set | best accuracy | nodes at best |
-|---|---|---|
-| `timing` | **100.0000 %** | 2 |
-| `timing_only` | 100.0000 % | 2 |
-| `no_rate` | 100.0000 % | 2 |
-| `paper` (reference 2 features) | 98.3037 % | 208 |
-
-**Two comparators reach 100 %**, on `dt_ratio_q6` and `id_rate`. That is a
-property of this attack, not a strong model: ID `0x000` never appears in clean
-traffic, so it has no baseline entry, and every feature derived from that table
-gives it away. A two-comparator whitelist is a legitimate and extremely cheap
-DoS defence, but it is not a random forest and it stops working the moment a
-flood reuses a valid ID.
-
-The reference paper's two features reach **98.3037 %** here, against the 98.2 %
-the paper reports on the same dataset. That agreement is the check that this
-pipeline measures what the paper measured.
-
-### Model selected on the real capture alone
-
-Kept for the record, and **not** the one to deploy: see the overfitting section
-above. 7 trees, 23 comparator nodes, depth 3, splitting on 8 of 12 features:
-
-```
-accuracy   100.0000 %
-recall     100.0000 %   (0 missed attacks)
-precision  100.0000 %   (0 false alarms)
-```
-
-on 1 649 597 held-out frames. Splits: `dt_ratio_q6` 6, `id_rate` 5,
-`pl_popcount` 3, `dt_id` 3, `burst` 2, `dt_id_dev` 2, `dt_bus` 1, `hd` 1.
-
-The smallest 100 % model is 2 comparators. The selector does not pick it:
-`--policy robust` spreads the verdict across features so no single one carries
-it, and `--max-nodes` keeps that in budget. 23 comparators instead of 2 is a
-rounding error in area.
-
-### Adaptive attacker, on real traffic
-
-The real DoS capture contains only the crude attack, so it cannot answer what
-happens against an attacker who floods a legitimate ID. `src/attack_on_real.py`
-answers it with the files already here: it takes HCRL's attack-free
-`normal_run_data.txt`, 988 871 frames of genuine vehicle traffic, and injects a
-flood on top. The background traffic, its jitter, its payload behaviour and its
-ID mix are all real; only the attack is synthetic, and the attack is the part
-whose parameters are documented (0.3 ms period, 3 to 5 s bursts, ~16 % of
-frames).
-
-Three modes, flooding the busiest legitimate ID `0x2c0`:
-
-| mode | best accuracy | nodes | FP | FN |
-|---|---|---|---|---|
-| `zero-id` (reproduces the real DoS attack) | 100.0000 % | 1 | 0 | 0 |
-| `valid-id` (legit ID, all-zero payload) | 99.9996 % | 5 | 0 | 2 |
-| `stealth` (legit ID, replayed real payloads) | 99.5386 % | 7 | 2421 | 5 |
-
-On the stealth case every feature set converges to the same 99.5386 %, and the
-reason is worth stating precisely. With 3 trees and 6 comparators:
-
-* all 2421 false positives are on `0x2c0`, none on any other ID
-* all 5 false negatives are on `0x2c0`
-* the other 26 IDs are classified perfectly
-
-The entire residual error is the victim's own frames, 2421 of its 22 160.
-During a flood those frames arrive at the flood period like everything else
-carrying that ID, so they are genuinely ambiguous per frame. That is a property
-of the problem, not of the model, and no amount of extra trees moves it.
-
-### The 100 % model does not survive an adaptive attacker
-
-This is the most important measurement here. Taking the model trained on the
-real DoS capture, the one that scores 100 %, and running it unchanged against
-the other attacks:
-
-| trace | accuracy | recall | FP | FN |
-|---|---|---|---|---|
-| real DoS capture (its own data) | 100.0000 % | 100.0000 % | 0 | 0 |
-| `zero-id` flood, different drive | 95.7927 % | 100.0000 % | 22 120 | 0 |
-| `valid-id` flood | 95.7918 % | 99.9946 % | 22 120 | 5 |
-| **`stealth` flood** | 78.0178 % | **0.0000 %** | 22 120 | 93 453 |
-
-**Recall zero.** It misses every single injected frame.
-
-The forest's own thresholds explain it. Two of its seven trees root on
-`pl_popcount <= 0`, meaning "the payload is all zeros". Another roots on
-`dt_ratio_q6 <= 0`, and a ratio of exactly zero happens only when an ID has no
-baseline entry at all. So the model that scores 100 % learned "this ID is not
-in the whitelist, and its payload is blank". A flood that reuses a valid ID with
-plausible payloads produces ratio 1 and a nonzero payload, and walks straight
-through.
-
-That is what a 100 % number on this dataset is worth. It is reported here as a
-measurement rather than a caveat because it was easy to state as a caveat and
-harder, and more useful, to demonstrate.
-
-### The model to actually deploy
-
-Train on the hardest case, not the easiest. The model selected on the stealth
-trace is **3 trees, 14 comparator nodes, depth 3**, and it covers everything:
-
-| trace | accuracy | recall | FP | FN |
-|---|---|---|---|---|
-| `zero-id` flood | 100.0000 % | 100.0000 % | 0 | 0 |
-| `valid-id` flood | 99.5386 % | 99.9946 % | 2421 | 5 |
-| `stealth` flood | 99.5386 % | 99.9946 % | 2421 | 5 |
-| real DoS capture, **different drive** | 99.4085 % | 93.4007 % | **0** | 9758 |
-
-Nine fewer comparators than the 100 % model, and it is the only one of the two
-that works against an attacker who has read the paper.
-
-The last row is a separate finding: the baseline ROM learned from one drive,
-applied to a capture recorded eleven days earlier, produced **zero false alarms**
-across 3.07 million normal frames. The per-ID timing baseline transfers across
-drives cleanly. Recall drops to 93.4 % there because the model was trained
-against a flood of a known ID and the DoS capture floods an unknown one, which
-argues for training on a mix of attack styles rather than one.
-
-### SynCAN, an independent benchmark
-
-Scored on SynCAN's own held-out slice, with its window labels:
-
-| feature set | best accuracy | recall | comparators |
-|---|---|---|---|
-| timing and rate only | 97.11 % | 92.53 % | 508 |
-| all features | 97.11 % | 93.80 % | 420 |
-| reference paper, 2 features | 88.22 % | **59.56 %** | 9 |
-| the frozen model, after pruning | 96.74 % | 92.03 % | **8** |
-
-Comparator counts from the sweep are as trained. A frozen model then loses every
-comparator whose two branches reach the same verdict, which is why the last row
-is far smaller than the rows above it: that model's sweep point was 21 nodes and
-it pruned to 8 with identical predictions.
-
-The reference design's two features lose a third of all attacks on data neither
-design was tuned against, while timing and rate hold 92 %. That gap is the case
-for the extra features, measured out of sample rather than argued.
-
-Note the per-frame recall is capped by the labelling: a frame of some other ID
-inside an attacked window is labelled attack, so no per-frame detector can score
-100 % against these labels. The bus-rate feature happens to fire for every ID
-during a flood, which is why the numbers land as high as they do.
-
-## Alarms, not frames
-
-Per-frame accuracy is the wrong final metric. The residual per-frame error is
-the flooded ID's own frames arriving at the flood period, which are ambiguous
-one frame at a time and are *scattered singles*. An IDS does not act on one
-frame: it raises an alarm on an ID, and a node exclusion system acts on that ID.
-
-`src/eval_windows.py` adds that layer. Per ID, a leaky integrator: a flagged
-frame adds one, the score bleeds off with elapsed time, and the ID alarms while
-the score is at or above a threshold. A small counter and a timestamp per ID.
-Scattered false positives decay before the next one arrives; a flood crosses the
-threshold in milliseconds.
-
-### The result
-
-The deployed model is **5 trees, 8 comparator nodes, depth 2**, trained on
-mixed-rate floods. At alarm threshold 8:
-
-| trace | windows | detected | worst detect | false alarms |
-|---|---|---|---|---|
-| real HCRL DoS capture | 73 | **73 / 73** | 19.2 ms | 0 |
-| real traffic + `0x000` flood | 5 | 5 / 5 | 5.5 ms | 0 |
-| real traffic + valid-ID flood | 5 | 5 / 5 | 7.1 ms | 0 |
-| real traffic + stealth on `0x2c0` | 5 | 5 / 5 | 7.1 ms | 0 |
-| real traffic + stealth on `0x316` | 5 | 5 / 5 | 7.1 ms | 0 |
-| real traffic + 2x low-rate flood | 7 | 7 / 7 | 58.4 ms | 0 |
-| real traffic + mixed-rate floods | 43 | **43 / 43** | 60.1 ms | 0 |
-
-**143 of 143 attack windows, zero false alarms in every second of clean traffic
-measured**, across three different victim IDs and injection rates from 2x to 33x
-the victim's own frame rate.
-
-Two latencies, kept apart. The per-frame verdict is immediate. The *alarm* takes
-between a few and sixty milliseconds because it waits for corroborating frames,
-and the slower the flood the longer that wait. That wait is what buys the zero
-false-alarm rate.
-
-### Detection floor against attack rate
-
-The flood's rate is the attacker's free parameter and the one the detector is
-most sensitive to, so it gets measured separately rather than averaged away.
-`src/rate_floor.py` labels every window with its own injection rate:
-
-| attack rate | windows | detected | median detect |
-|---|---|---|---|
-| under 3x | 3 | 3 / 3 | 39.9 ms |
-| 3x to 6x | 9 | 9 / 9 | 17.6 ms |
-| 6x to 12x | 6 | 6 / 6 | 10.8 ms |
-| 12x to 24x | 15 | 15 / 15 | 4.0 ms |
-| above 24x | 10 | 10 / 10 | 1.8 ms |
-
-Latency scales with how quiet the attacker is, which is the expected shape: less
-evidence per unit time takes longer to accumulate.
-
-### The overfitting this exposed, and a correction
-
-An earlier version of this file recommended a model trained only on 33 %-duty
-floods of a single victim ID, `0x2c0`. Tested against the traces above, that
-model is far more overfit than its own numbers suggested:
-
-| trace | mixed-trained | the earlier model |
-|---|---|---|
-| real HCRL DoS | 73 / 73 | 73 / 73 |
-| `0x000` flood | 5 / 5 | 5 / 5 |
-| valid-ID flood | 5 / 5 | 5 / 5 |
-| stealth on `0x2c0` | 5 / 5 | 5 / 5 |
-| **stealth on `0x316`** | **5 / 5** | **0 / 5** |
-| **2x low-rate flood** | **7 / 7** | **0 / 7** |
-| **mixed-rate floods** | **43 / 43** | **0 / 43** |
-
-It is blind to a flood of a *different legitimate ID*, and blind at every rate
-band including above 24x. It had effectively memorised `0x2c0`. Both models are
-8 comparators, so this cost nothing in size: it is purely what the training set
-spanned. The fix was to vary the attacker's rate and victim across bursts
-(`attack_on_real.py --mode mixed`) and train on that.
-
-The general lesson, and it applies to the reference paper's numbers as much as
-to mine: a CAN IDS benchmark that contains one attack rate against one victim ID
-cannot distinguish a detector from a lookup table.
-
-### Two metric bugs of the same family
-
-Both were caught by results that were impossible rather than merely bad, and
-both are worth naming because they are easy to write again.
-
-**Frame-counted history.** The first alarm rule used a shift register of the
-last N verdicts per ID. It reported **1 of 73 windows detected on a trace where
-the model was perfect frame by frame**. An attacker's ID goes silent between
-floods, so its register never gets a zero pushed in and the alarm latches
-forever. The rule now decays with elapsed time and clears an ID that falls
-silent.
-
-**Start-counted detection.** The metric then asked whether an alarm *started*
-inside each window. A fast burst saturates the score, which takes over a second
-to decay, so a window opening inside that shadow recorded no new start even
-though the ID was alarming throughout it. That scored fast floods as *less*
-detected than slow ones, which is backwards. It now asks whether the alarm was
-*active* during the window, which is also the question an operator is asking.
-
-## Which features actually earn their place
-
-Measured by running the sweep with the group removed:
-
-| trace | with payload features | without any |
-|---|---|---|
-| real HCRL DoS | 100.0000 % @ 2 nodes | 100.0000 % @ 2 nodes |
-| `0x000` flood | 100.0000 % @ 1 node | 100.0000 % @ 1 node |
-| **valid-ID flood** | **99.9996 % @ 5** | **99.5386 % @ 8** |
-| stealth on `0x2c0` | 99.5386 % | 99.5386 % |
-| stealth on `0x316` | 99.5386 % @ 9 | 99.5386 % @ 8 |
-| SynCAN flooding | 97.1062 % | 97.1126 % |
-
-Payload features earn their place in exactly one scenario: a flood that reuses a
-legitimate ID but with a degenerate, all-zero payload. Against an attacker who
-replays valid payloads they contribute nothing measurable.
-
-That is a real design choice with a measured price. Dropping them removes the
-64-bit last-payload state and the 135 bits of per-ID payload ROM, about 71 % of
-the per-ID memory, and costs 0.46 points on the lazy valid-ID flood alone. The
-`no_payload` feature set is there for that trade.
-
-### A feature that did not earn its place
-
-The payload features leave the victim's own in-flood frames unresolved, so a
-purpose-built one was tried: a *gated* per-ID payload tracker, which follows the
-ID's signal trajectory and folds in only samples already close to its estimate,
-on the theory that it stays locked on the smooth legitimate signal and treats
-replayed samples as outliers.
-
-Measured inside attack windows, on the flooded ID alone, it separates the
-victim's frames from the injected ones at AUC 0.634. For comparison,
-`dt_ratio_q6` already there manages 0.929:
-
-| feature | AUC, in-window, on the flooded ID |
+Generated by `src/final_report.py`; `results/FINAL.md` is its output. Alarm
+threshold 2, every trace a held-out slice.
+
+| trace | windows | detected | median | worst | false alarms |
+|---|---|---|---|---|---|
+| real HCRL DoS capture | 73 | **73** | 1.0 ms | 5.3 ms | 0 |
+| 0x000 flood | 5 | **5** | 1.3 ms | 1.6 ms | 0 |
+| valid-ID flood | 5 | **5** | 1.0 ms | 1.8 ms | 0 |
+| stealth on 0x2c0 | 5 | **5** | 1.0 ms | 1.8 ms | 0 |
+| stealth on 0x316 | 5 | **5** | 1.3 ms | 1.8 ms | 0 |
+| 2x low-rate flood | 7 | **7** | 10.0 ms | 10.0 ms | 0 |
+| mixed-rate floods | 43 | **43** | 1.3 ms | 10.3 ms | 0 |
+| SynCAN flooding | 53 | **53** | 4.9 ms | 15.7 ms | 0 |
+| **total** | **196** | **196** | | **15.7 ms** | **0** |
+
+59 minutes of clean traffic across those traces, 0.00 false alarms per hour.
+
+The SynCAN row is the one worth pausing on. That is a different vehicle, a
+different capture format and signal-level rather than raw payload bytes, scored
+with thresholds calibrated on the HCRL clean capture. It transfers because the
+thresholds are expressed in units relative to each ID's own behaviour rather
+than in microseconds.
+
+### The control
+
+988 871 frames of genuinely attack-free traffic, where every alarm is false by
+construction:
+
+| | |
 |---|---|
-| `dt_ratio_q6` | **0.929** |
-| `burst` | 0.726 |
-| `pl_violation` | 0.663 |
-| the gated tracker | 0.634 |
-| `hd`, `hd_dev` | 0.554 |
+| frames flagged | **0** |
+| alarm events | **0** |
+| false alarms per hour | **0.00** |
 
-The sweep confirmed it: on the `0x316` flood the front with the tracker and the
-front without it are identical to the frame, 99.538571 % and the same 2421 false
-positives either way. It was removed. Recorded here because the negative result
-is the useful part: the timing features are at the information limit for
-per-frame discrimination inside a flood, and no payload feature moves it. What
-moves it is the alarm layer above.
+### An hour of ordinary driving with rare attacks
 
-One measurement from that experiment is worth keeping: `0x2c0`, the ID the
-original stealth trace floods, carries a *single constant payload* in the real
-capture. Replaying it is indistinguishable by construction. `0x316` was added as
-a second victim precisely because it carries a smoothly varying signal, 50.9 %
-unique payloads with a median consecutive step of 2, and it is the realistic
-spoofing target. The conclusion holds on both.
+The table above is measured on traces that are roughly a third attack traffic,
+which flatters a false-alarm rate badly: there is so little clean traffic that
+being wrong about it barely costs anything. `src/soak.py` builds the duty cycle
+that matters, tiling the clean capture to an hour and dropping short bursts in
+at 30 to 120 second intervals across all 27 victim IDs.
 
-## Reading the trees
+| | |
+|---|---|
+| trace | 6 962 927 frames, 59.1 min, **1.78 %** attack traffic |
+| bursts caught | 44 / 48 |
+| worst detect | 39.7 ms |
+| false alarms | **0** in 58.0 min of clean traffic |
 
-`src/show_trees.py` prints any frozen forest as trees you can follow by eye,
-with each threshold translated into physical units:
+### The hard attacks, and where it fails
 
-```bash
-python3 src/show_trees.py --model results/realatk_stealth/model.json
-```
+These are the ones built specifically to defeat it. `phase` is the one to beat:
+every injected frame sits at the exact midpoint of the victim's period, so the
+arrival pattern stays perfectly regular and the rate never exceeds 2x.
 
-Where the same forest lives, in three forms:
+| attack | caught | worst | false alarms |
+|---|---|---|---|
+| exact-midpoint phasing, 2x | 17 / 19 | 39.7 ms | 0 |
+| creep, 1.2x | 15 / 17 | 26.3 ms | 0 |
+| ramp, 1.2x to 8x | 20 / 21 | 1128.3 ms | 0 |
+| single injected frame | **0 / 22** | — | 0 |
 
-| file | form | for |
-|---|---|---|
-| `results/<tag>/model.json` | integer node tables | the reference predictor, and anything that consumes the model |
-| `src/show_trees.py` output | indented tree with units | reading |
-| `results/dashboard.html` | charts and tables, all datasets | comparing at a glance |
+The single-frame row is the honest floor. An alarm that waits for corroborating
+evidence cannot fire on one frame, and no threshold fixes that; it is a
+property of the design. If one injected frame matters, this is the wrong
+architecture.
 
-`results/dashboard.html` is generated from `src/export_viz_data.py` output and
-opens in a browser with no server. Every figure on it is read from that JSON, so
-re-running a sweep and regenerating the data updates the page.
+The ramp's 1128 ms worst case is the attack working as intended: it opens at
+1.2x, below anything that fires, and is caught when it speeds up.
 
-### How a verdict is reached
+## How it got here
 
-Every tree sees the same features and votes ATTACK or normal. The frame is
-flagged when a majority of trees vote ATTACK. Tree counts are always odd so the
-vote cannot tie, the same constraint the reference hardware design imposes.
+Five things were believed, measured, and found wrong. The order matters,
+because each fix exposed the next failure, and every one of them was the same
+failure at a deeper level: **a threshold that encodes an assumption about the
+training data rather than a property of an attack.**
 
-Nothing about the evaluation is sequential. Every comparison in every tree
-depends only on the feature vector, so all of them can be evaluated at once and
-the depth of a tree costs nothing but the mux chain that selects its leaf. That
-is what made the original hardware version a single clock cycle, and it is why
-depth is close to free while node count is what to keep small.
+### 1. A perfect score that was a whitelist in a forest costume
 
-### The recommended forest in full
+A forest trained on the real HCRL DoS capture scores **100 %** on its own
+held-out slice. Run unchanged against a flood that reuses a legitimate ID with
+that ID's own replayed payloads, its recall is **zero**.
 
-3 trees, 8 comparators, majority of 2. `id_rate` is a sustained-rate estimate
-where 64 means the ID is running at its normal rate; `dt_ratio_q6` is the
-current gap as a fraction of that ID's normal gap, where 64 means exactly on
-schedule.
+Its own thresholds explain it. Two of seven trees test `pl_popcount <= 0`, which
+means "the payload is all zeros", and another tests `dt_ratio_q6 <= 0`, a value
+only reachable when an ID has no baseline entry at all. It had learned *this ID
+is not on the whitelist and its payload is blank*. The real capture's only
+attack is a flood of ID `0x000`, which is separable by construction, so a
+whitelist scores perfectly on it.
 
-```
-TREE 0  (4 comparators)
-  id_rate <= 288                    running at most 4.5x normal rate?
-    yes: dt_ratio_q6 <= 12          arrived under 20 % into its normal gap?
-           yes: ATTACK
-           no:  normal
-    no:  burst <= 0                 no back-to-back frames of this ID?
-           yes: dt_id_dev <= 8289   gap within 8.29 ms of normal?
-                  yes: normal
-                  no:  ATTACK
-           no:  ATTACK
+Fix: remove `can_id` and `id_known` from the feature set, so there is no
+whitelist to learn.
 
-TREE 1  (2 comparators)
-  pl_popcount <= 2                  payload almost entirely zero bits?
-    yes: dt_id <= 1310              arrived within 1.31 ms of the last one?
-           yes: ATTACK
-           no:  normal
-    no:  normal
+### 2. Trained on one attack rate, blind to every other
 
-TREE 2  (2 comparators)
-  pl_popcount <= 2                  payload almost entirely zero bits?
-    yes: dt_ratio_q6 <= 9           arrived under 16 % into its normal gap?
-           yes: ATTACK
-           no:  normal
-    no:  normal
-```
+The replacement was trained on 33 %-duty floods of one victim ID and looked
+finished: 143 of 143 windows. Tested against a second victim and against slower
+floods it caught **88 of 143** — and not by degrading. It returned **zero** on
+the second victim ID, zero on a 2x flood, and zero on every mixed-rate window.
 
-Read as one sentence: trees 1 and 2 catch a degenerate payload arriving far too
-early, and tree 0 catches a flood on timing and rate alone without looking at
-the payload at all. Tree 0 is why the forest still works when the attacker
-replays valid payloads, because it is the one that does not depend on them.
+Its per-frame accuracy never showed this. It scores 99.5 % on its own test
+slice, and the failures are invisible in that number because the traces it
+fails on were not in it.
 
-### Pruning, and an honest note on what it bought
+Fix: train across five injection rates and two victim IDs.
 
-Rendering the trees exposed comparators whose two branches led to the same
-verdict. sklearn creates them when a split reduces impurity but both leaves end
-up the same majority class. `prune_equivalent` in `select_model.py` collapses
-any node whose whole subtree agrees, which is behaviour preserving by
-construction and asserted against the unpruned predictions:
+### 3. An hour of real traffic, and the slow IDs
 
-| model | comparators before | after |
-|---|---|---|
-| recommended | 14 | **8** |
-| real DoS | 23 | **19** |
+Every result so far was measured at 33 % attack traffic. At a realistic 1.8 %,
+the model caught 38 of 48 bursts — and the misses were not a rate floor. 16x
+floods got through while 1.5x floods were caught. They were all on slow IDs.
 
-Accuracy, false positives and false negatives are all unchanged to the frame.
+Broken down per tree, on a 100 ms ID flooded at 8x its rate:
 
-What it did **not** buy, when the RTL still existed: the synthesised forest was
-byte identical before and after, 25 LUTs either way, because yosys and ABC were
-already eliminating that logic. So the gain is model size, readability, and a
-node count that is finally honest rather than inflated by up to 43 %. It would
-be a real saving for an implementation that stores the node table and walks it
-one node at a time, where every node costs storage and a step.
+| tree | votes attack on |
+|---|---|
+| `dt_ratio_q6 <= 34` | **98.9 %** of the injected frames |
+| `id_rate <= 135` | **95.6 %** |
+| `dt_id <= 5458` (µs) | 2.2 % |
+| `burst <= 0` | 0.0 % |
+| `bus_rate <= 63` | 26.4 % |
+| 3-of-5 majority | **flags 25.3 %** |
+
+The two trees testing scale-invariant features were right. The three testing
+absolute microseconds or burst length were wrong, because every victim ID in
+the training trace ran at 10 ms, so those thresholds encoded a period rather
+than an attack — and the majority buried the correct answer.
+
+Fix: drop every feature that is not relative to what that ID itself normally
+does. That is the `per_id` set, `dt_ratio_q6` and `id_rate`, and it took the
+model from 8 comparators to 4 while gaining 6 windows.
+
+`bus_rate` went with them, for a reason worth keeping: it is a bus-wide signal
+being used to make a per-ID decision. A model rooting on `bus_rate <= 63`,
+where clean traffic sits at 60 and a finished flood leaves it at 64 to 66 for
+1.4 to 4.6 seconds, alarmed on **eight innocent IDs simultaneously** two and a
+half seconds after a DoS ended. Removing it took cross-ID ringing from 61
+episodes to 0.
+
+### 4. The alarm layer had the same bug as the model
+
+Four bursts still got through, and the model was not why. `DECAY_PER_S` was 50,
+so a flagged frame's contribution is gone in 20 ms, and two flags 33 ms apart
+can never combine however anomalous each one is. Every one of those four
+bursts injected at 33 ms or slower on an ID running at 100 ms or more.
+
+Fix: the decay costs one score unit per two of the ID's *own* nominal periods,
+driven by `dt_ratio_q6`, which is already the elapsed gap in 64ths of that
+period and already computed for every frame. A subtract and a shift, no new
+state.
+
+That took two wrong turns, both recorded in `src/alarm_period.py`:
+
+- **The score cap.** 64 was sized for threshold 8. At threshold 2 the headroom
+  is time the alarm cannot clear in, and a 1 s ID that took 26 flags stayed
+  alarming for **111 s**, marking every window inside two minutes as detected.
+- **Scaling clear-on-silence the same way was simply wrong.** An unbaselined ID
+  has no stored reciprocal, so `dt_ratio_q6` is 0 on **100 %** of ID `0x000`'s
+  frames, and the bus fallback measures the gap since *any* frame, which stays
+  in the hundreds of microseconds while 26 other IDs talk. `0x000` appears only
+  inside floods and never registered as silent between them: one alarm ran
+  **215 s across four separate windows**. Silence is real time, so it is
+  measured in real time.
+
+### 5. The trained thresholds left a corridor, so training was dropped
+
+The 4-comparator forest was still completely invisible to a flood placed at
+the exact midpoint of the victim's period: **0 of 19** bursts, with not one
+clean frame flagged either, so nothing about it was marginal. (The
+8-comparator forest it replaced managed 7 of 19 there, incidentally rather
+than by design, at a 1564 ms worst case.)
+
+The reason is not coverage, and that is the point:
+
+| | |
+|---|---|
+| `id_rate` across 988 871 attack-free frames | never exceeds **71** |
+| `id_rate` under a 2x midpoint flood | **131 to 140** |
+| what the forest had learned | `id_rate <= 141` |
+
+A 60-unit gap, cleanly separated, and the forest missed every burst — because a
+decision tree picks the split that best separates *its training set*, and a
+threshold at 141 does that perfectly while leaving a 70-unit corridor an
+attacker can drive straight through. Generating more attack rates does not fix
+this in general; it just moves the corridor.
+
+Fix: set the thresholds from the clean capture alone. Take what normal traffic
+does, add a margin, flag anything past it. No attack data is involved, which is
+both more honest about what a vehicle can actually supply and immune to the
+rate, victim and phasing of an attack nobody thought to generate.
+
+| detector | comparators | 191 windows | worst | phase attack |
+|---|---|---|---|---|
+| `no_payload` forest | 8 | 181 | 60.0 ms | 7 / 19 |
+| `per_id` forest | 4 | 187 | 233.9 ms | 0 / 19 |
+| **clean-calibrated rule** | **3** | **187** | **39.7 ms** | **17 / 19** |
+
+Read the last column carefully, because it is not a clean progression. The
+`per_id` forest is *worse* on the phase attack than the 8-comparator one it
+replaced: narrowing the features to the scale-free pair is what made the model
+period-independent, and it also threw away the incidental coverage that
+`burst` and `dt_id` happened to give on midpoint-paced frames — 7 of 19 by
+accident rather than by design, at a 1564 ms worst case. Only calibrating the
+thresholds fixed it on purpose.
+
+## Three metric bugs, all the same shape
+
+Each of these made the detector look better or worse than it was, and each was
+caught by a number that should not have been possible.
+
+**Frame-counted alarm latching.** A shift register of the last N verdicts looks
+equivalent to a time-decayed score and is not: an attacker's ID goes silent
+between floods, so its register never gets a zero pushed in and the alarm
+latches forever. It reported **1 of 73 windows detected** on a trace where the
+model was perfect frame by frame.
+
+**Start-counted detection.** Asking "did an alarm *start* inside this window"
+undercounts, because a fast burst saturates the score and a window opening in
+that shadow records no new start. It scored fast floods as *less* detected than
+slow ones, which is backwards.
+
+**Interval-counted false alarms.** Counting alarm intervals rather than events
+made the false-alarm total *rise* with the threshold: one 250 ms disturbance on
+ID `0x43f` counted once at threshold 4 and three times at threshold 6, because
+the score dipped below and re-crossed twice. Same event, counted three times.
+
+And one classification that was wrong rather than buggy: alarms with no
+injected frames in them were counted as false positives, when every one of them
+in these traces is the rate buckets still draining after an attack the detector
+correctly caught. `0x43f` alarms 875 ms after a window ends, and the same ID is
+flagged **0 times in 50 641 frames** of attack-free capture. Post-attack
+ringing is now reported separately from false alarms, and the attack-free
+capture is the control that settles it.
+
+Latching is now a printed number — windows that opened on an already-running
+alarm, and the longest single alarm — because "the alarm was active during the
+window" is a sound rule only while alarms clear, and a stuck one satisfies it
+for free.
+
+## Things that were tried and did not work
+
+Kept because a measured negative result is worth as much as a positive one.
+
+**A gated payload tracker.** Built specifically to break the per-frame residual
+on a stealth flood, where the victim's own frames arrive at the flood period
+and are genuinely ambiguous. It reached AUC **0.634** on exactly that
+discrimination where `dt_ratio_q6` already reached **0.929**, and the sweep
+fronts were identical with and without it. Dropped.
+
+**Weighting the alarm by the forest's vote margin.** The vote count already
+exists in hardware, so adding the margin instead of 1 is free. At equal
+false-alarm cost it is *worse*: flat +1 at threshold 8 gives a 60.1 ms worst
+case, the margin needs threshold 12 to reach zero false alarms and gives
+75.0 ms. It improves the median and hurts the tail, and the tail is the
+guarantee.
+
+**Flooding ID `0x2c0` as a stealth test.** It carries a single constant
+payload, so replaying it is indistinguishable by construction and the test
+proves nothing about payload features. `0x316` replaced it: 50.9 % of its
+payloads are unique, median consecutive step 2.
+
+**A single-comparator model.** The search found one-tree forests catching every
+window with zero false alarms. Retrain the same shape on nine other seeds and
+most raise false alarms; at threshold 2, no shape was clean on all ten seeds.
+`src/seed_stability.py` exists because a zero that comes back on one seed in
+three is luck, not a property of the design.
 
 ## Verification
 
-The trained thresholds convert to integers with zero loss, because every
-feature is an integer and `x <= 2.5` is exactly `x <= 2` for integer `x`.
-`select_model.py` asserts that the exported integer tables reproduce the
-trained model exactly on both truncations, against a hard majority vote rather
-than sklearn's own `predict`, and it refuses to write a model if they differ.
+- Train and test slices are contiguous and disjoint with a discarded gap
+  between them (0–45 %, discard, 55–100 %), never a shuffled split, because the
+  timing features leak under a random one.
+- The calibration uses the training span only, so traces built over the later
+  part of the same capture are genuinely held out. (Calibrated on the whole
+  capture the thresholds come out identical, but the clean version is what
+  ships.)
+- Every feature is an integer, so an sklearn split `x <= 2.5` converts to
+  `x <= 2` with **zero** loss. The frozen integer tables are asserted to
+  reproduce the float forest on both truncations, not assumed to.
+- Scoring uses the hard majority vote the frozen model implements, not
+  sklearn's averaged class probabilities. Those disagree, and the assertion
+  that caught it found **1 064** mismatched frames.
+- Node pruning collapses any comparator whose whole subtree agrees. That is
+  behaviour-preserving by construction and asserted anyway.
+- `src/cache_eval.py` pre-extracts a trace's features once; it is verified to
+  reproduce `src/eval_windows.py` exactly on all seven traces before being used
+  to speed anything up.
+- A truncation containing no attack frames is caught loudly rather than
+  silently producing a model that predicts "normal" for everything at 66 %
+  accuracy.
 
-`prune_equivalent` is asserted the same way: the pruned trees must predict
-identically to the unpruned ones, frame for frame.
+## Features
 
-`run_all.sh` refuses to continue if either truncation ends up with no attack
-frames or no normal frames. A short capture whose attack bursts all land in one
-half will otherwise train a model that predicts "normal" for everything and
-still reports a plausible-looking accuracy.
+Fourteen integer features are computed; the shipped detector uses two. The rest
+exist so the comparison is measured rather than asserted, and
+`src/features.py` documents the hardware cost of each.
 
-## Recovering the RTL
+| feature | what it is |
+|---|---|
+| `dt_ratio_q6` | gap ÷ that ID's learned period, in 64ths. **64 = on schedule** |
+| `id_rate` | that ID's sustained rate. **64 = its normal rate** |
+| `bus_rate` | the same for the whole bus |
+| `dt_id`, `dt_id_dev`, `dt_bus`, `burst` | absolute timing, in microseconds |
+| `hd`, `hd_dev` | payload Hamming distance from the previous frame |
+| `pl_violation`, `pl_popcount` | payload bits breaking that ID's invariant |
+| `dlc`, `can_id`, `id_known` | frame identity |
 
-The Verilog was removed on request. It is intact in git history at commit
-`b915807`, where both testbenches passed at zero mismatches against the Python
-pipeline and the design synthesised to 810 LUTs, 322 flip-flops, 33 BRAM18
-equivalents and 2 DSP48 on xc7.
+`dt_ratio_q6` is one 16×16 multiply by a stored reciprocal, no divider.
+`id_rate` and `bus_rate` are leaky buckets whose leak is proportional to the
+bucket's own contents — a fixed leak has no restoring force and random-walks to
+saturation on perfectly normal traffic, which it did, flagging 96 % of normal
+frames before it was fixed.
 
-```bash
-git checkout b915807 -- "random forest ids/rtl"
-git checkout b915807 -- "random forest ids/src/export_verilog.py" \
-                        "random forest ids/src/export_rom.py" \
-                        "random forest ids/src/syn_report.py" \
-                        "random forest ids/src/hw_report.py"
-```
+## Known limitations
+
+- **One injected frame is not detectable**, by construction. The alarm waits
+  for corroboration.
+- **A 1.2x flood is caught 15 times in 17.** Below roughly 1.2x the added
+  frames sit inside normal jitter.
+- **The slowest IDs cost latency, not detection.** A 1 s ID flooded at 5x
+  injects every 200 ms, so two flags take 400 ms. That is arithmetic, not
+  tuning.
+- **Post-attack ringing is real.** The rate buckets drain for 1.4 to 4.6 s
+  after a flood, and during that window bystander IDs can alarm. It is reported
+  separately and is not a false positive on clean traffic, but an operator
+  would see it.
+- **The clean capture is 8.4 minutes.** A false-alarm rate of "zero per hour"
+  rests on 59 minutes of clean traffic across all traces and one 8.4 minute
+  attack-free control. It is not a fleet-scale figure.
+- **Spoofing attacks are untested.** HCRL's `Fuzzy_dataset.csv`,
+  `gear_dataset.csv` and `RPM_dataset.csv` change payload contents without
+  changing timing, so a rate-and-timing detector is the wrong shape for them
+  and they would need different features.
+- **No RTL.** The Verilog and its yosys/Icarus flow were removed on request.
+  `git show b915807` has the last version.
 
 ## Layout
 
 ```
-src/make_trace.py      HCRL-format trace generator, for attacks the real
-                       DoS capture does not contain
-src/can_data.py        loaders for the real HCRL attack CSVs and for the
-                       attack-free normal_run_data.txt
-src/features.py        streaming integer feature extraction
-src/prepare.py         truncation split, baseline fit, feature cache
-src/sweep.py           forest geometry sweep
-src/select_model.py    pick and freeze a model, assert integer exactness
-src/report.py          markdown report of every sweep
-src/show_trees.py      print a frozen forest as readable trees
-src/syncan_data.py     loader for the SynCAN benchmark
-src/export_viz_data.py collect every result into one JSON for charting
-src/eval_windows.py    score alarms per attack window, not frames
-src/rate_floor.py      detection rate against the attacker's injection rate
-src/cross_eval.py      score one frozen model against other attack styles
-src/attack_on_real.py  inject a flood into HCRL's real attack-free capture
-run_all.sh             CSV in, trained forest out
+src/build_detector.py    clean capture in, shipped detector out. Start here.
+src/calibrate.py         sets the thresholds from clean traffic alone
+src/final_report.py      every headline number in this README
+src/soak.py              an hour of ordinary traffic, and the hard attacks
+src/features.py          the 14 integer features and their hardware cost
+src/eval_windows.py      the alarm layer, and what counts as a detection
+src/alarm_period.py      period-scaled decay, and the two wrong turns
+src/can_data.py          HCRL CSV and normal_run_data.txt loaders
+src/syncan_data.py       the independent benchmark's format
+src/attack_on_real.py    floods injected into real attack-free traffic
+src/prepare.py           the contiguous train/test split
+src/sweep.py             forest size and depth, with the hardware voter
+src/select_model.py      freeze to integer tables, prune, assert equivalence
+src/search_model.py      ranks candidates on alarms, not per-frame accuracy
+src/seed_stability.py    retrains one shape across seeds
+src/false_alarm_rate.py  the attack-free control
+src/ringing.py           separates recovery transients from false positives
+src/show_trees.py        prints the rules in English
+src/build_dashboard.py   generates results/dashboard.html from the results
+LOCAL_TEST.md            the local run, command by command
+HISTORY.md               the superseded trained-forest write-up
 ```
 
-## Known limitations
+Data files are deliberately absent. SynCAN's licence forbids redistributing the
+data or modified versions and this repository is public;
+`src/attack_on_real.py` and `src/soak.py` regenerate every derived trace from
+the originals.
 
-* The accuracy numbers come from generated traces, not from HCRL. Rerun on the
-  real file before quoting any of them.
-* `pl_violation` assumes the training window contains enough clean traffic to
-  observe each ID's real variability. A vehicle state absent from training (a
-  gear or mode never engaged) can flip a bit thought to be invariant and cause
-  false positives. The 500-sample floor mitigates this but does not remove it.
-* The arbitration model in the generator is a queue with priority, not a
-  bit-level CAN simulation. It is good enough to reproduce flood-induced delay,
-  not to study arbitration corner cases.
-* Only DoS-style flooding is modelled. Fuzzy and spoofing captures from the same
-  dataset family will load and run through this flow unchanged, but nothing here
-  has been tuned for them.
-* The residual false alarms are almost entirely the flooded ID's own legitimate
-  frames. During a sustained flood those frames are genuinely ambiguous at the
-  per-frame level, since they arrive at the flood period like everything else
-  carrying that ID. Driving that number down further needs a verdict at the
-  (ID, time window) level rather than per frame, which is what a node exclusion
-  system wants anyway.
+Data: HCRL Car-Hacking (Song, Woo & Kim) and SynCAN (Hanselmann, Strauss,
+Dormann & Ulmer, *CANet*, IEEE Access 8, 2020).
