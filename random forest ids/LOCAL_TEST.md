@@ -48,11 +48,11 @@ python3 src/build_detector.py --clean data/normal_run_data.txt
 ```
 
 ```
-clean capture  988871 frames over 8.4 min, 27 CAN IDs
+clean capture  444992 of 988871 frames (train span) over 3.8 min, 27 CAN IDs
 baseline       27 IDs, bus interval 240 us  ->  results/detector/baseline.json
 
   id_rate      clean max 71, threshold > 80  (0 clean frames past it)
-  dt_ratio_q6  clean min 32, p0.01 39, threshold <= 39  (105 clean frames past it, 0.01062 %)
+  dt_ratio_q6  clean min 32, p0.01 39, threshold <= 39  (74 clean frames past it, 0.01663 %)
 
 the whole detector:
   flag a frame when  id_rate > 80  OR  dt_ratio_q6 <= 39
@@ -60,6 +60,12 @@ the whole detector:
 ```
 
 That rule is the entire classifier. Three comparator nodes, two features.
+
+It calibrates on the capture's leading 45 % rather than all of it, because the
+synthetic test traces in step 5 are built over the *later* part of the same
+capture and calibrating on all of it would be calibrating on the traffic under
+test. `--span all` uses the whole capture; the thresholds come out identical
+either way, but the held-out version is what ships.
 
 ## 4. Test it on the real attack
 
@@ -78,12 +84,18 @@ per frame  91 false positives, 1 missed
 
  threshold   windows detected  median detect  worst detect  false alarms  per hour
          1        73 / 73              0.0 ms        0.5 ms             0      0.00
-         2        73 / 73              1.0 ms        5.3 ms             0      0.00
-         4        73 / 73              1.9 ms        6.7 ms             0      0.00
-         8        73 / 73              3.8 ms       18.7 ms             0      0.00
+         2        73 / 73              1.5 ms       31.9 ms             0      0.00
+         4        73 / 73              3.5 ms      513.1 ms             0      0.00
+         8        69 / 73              7.4 ms      518.0 ms             0      0.00
 ```
 
 Takes about 3 minutes, most of it parsing the 190 MB CSV.
+
+**Threshold 2 is the shipped setting.** The alarm score is capped just above
+the threshold, because every unit of headroom above it is time the alarm cannot
+clear in, so a higher threshold has less accumulated evidence to work with and
+both the latency and the misses grow. That coupling is why the cap is derived
+from the threshold rather than set as a constant.
 
 ## 5. Test it on attacks the HCRL capture does not contain
 
