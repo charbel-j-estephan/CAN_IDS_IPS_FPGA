@@ -1,0 +1,303 @@
+[
+ {
+  "rate": 7.63578449217328,
+  "detected": true,
+  "latency_ms": 11.614084243774414,
+  "victim": 790,
+  "seconds": 0.8187789916992188
+ },
+ {
+  "rate": 19.085987261146496,
+  "detected": true,
+  "latency_ms": 17.213106155395508,
+  "victim": 790,
+  "seconds": 2.7096521854400635
+ },
+ {
+  "rate": 5.068076109936575,
+  "detected": true,
+  "latency_ms": 40.0080680847168,
+  "victim": 790,
+  "seconds": 4.600872993469238
+ },
+ {
+  "rate": 4.000667556742323,
+  "detected": true,
+  "latency_ms": 17.812013626098633,
+  "victim": 790,
+  "seconds": 1.515287160873413
+ },
+ {
+  "rate": 38.03354487760653,
+  "detected": true,
+  "latency_ms": 3.1859874725341797,
+  "victim": 790,
+  "seconds": 0.2987220287322998
+ },
+ {
+  "rate": 3.9995233101344265,
+  "detected": true,
+  "latency_ms": 0.0,
+  "victim": 790,
+  "seconds": 2.223151206970215
+ },
+ {
+  "rate": 2.000047675804529,
+  "detected": true,
+  "latency_ms": 44.67296600341797,
+  "victim": 790,
+  "seconds": 3.98051381111145
+ },
+ {
+  "rate": 16.005723006486075,
+  "detected": true,
+  "latency_ms": 0.0,
+  "victim": 790,
+  "seconds": 0.5874319076538086
+ },
+ {
+  "rate": 4.001049117787315,
+  "detected": true,
+  "latency_ms": 17.277956008911133,
+  "victim": 790,
+  "seconds": 4.096826076507568
+ },
+ {
+  "rate": 19.085987261146496,
+  "detected": true,
+  "latency_ms": 6.258964538574219,
+  "victim": 790,
+  "seconds": 1.7752070426940918
+ },
+ {
+  "rate": 12.723991507430998,
+  "detected": true,
+  "latency_ms": 0.0,
+  "victim": 790,
+  "seconds": 5.956686973571777
+ },
+ {
+  "rate": 4.000667556742323,
+  "detected": true,
+  "latency_ms": 15.074014663696289,
+  "victim": 790,
+  "seconds": 1.5352909564971924
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": true,
+  "latency_ms": 4.191875457763672,
+  "victim": 790,
+  "seconds": 0.26042795181274414
+ },
+ {
+  "rate": 15.999618611746758,
+  "detected": true,
+  "latency_ms": 4.736900329589844,
+  "victim": 790,
+  "seconds": 0.47579002380371094
+ },
+ {
+  "rate": 16.7804,
+  "detected": true,
+  "latency_ms": 5.641937255859375,
+  "victim": 790,
+  "seconds": 0.4353139400482178
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": true,
+  "latency_ms": 2.6199817657470703,
+  "victim": 790,
+  "seconds": 0.3893320560455322
+ },
+ {
+  "rate": 19.085987261146496,
+  "detected": true,
+  "latency_ms": 3.971099853515625,
+  "victim": 790,
+  "seconds": 1.2703361511230469
+ },
+ {
+  "rate": 9.336968617849989,
+  "detected": true,
+  "latency_ms": 40.00687599182129,
+  "victim": 790,
+  "seconds": 4.316112041473389
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": true,
+  "latency_ms": 2.095937728881836,
+  "victim": 790,
+  "seconds": 0.40347981452941895
+ },
+ {
+  "rate": 33.00629425649095,
+  "detected": true,
+  "latency_ms": 1.5151500701904297,
+  "victim": 790,
+  "seconds": 0.2750279903411865
+ },
+ {
+  "rate": 8.001335113484647,
+  "detected": true,
+  "latency_ms": 8.752107620239258,
+  "victim": 790,
+  "seconds": 1.0617730617523193
+ },
+ {
+  "rate": 3.825551705270837,
+  "detected": true,
+  "latency_ms": 19.751787185668945,
+  "victim": 790,
+  "seconds": 1.6402168273925781
+ },
+ {
+  "rate": 4.000667556742323,
+  "detected": true,
+  "latency_ms": 17.641067504882812,
+  "victim": 790,
+  "seconds": 1.9405581951141357
+ },
+ {
+  "rate": 12.727851941747574,
+  "detected": true,
+  "latency_ms": 0.0,
+  "victim": 790,
+  "seconds": 4.573851823806763
+ },
+ {
+  "rate": 12.723991507430998,
+  "detected": true,
+  "latency_ms": 3.6079883575439453,
+  "victim": 790,
+  "seconds": 5.3107500076293945
+ },
+ {
+  "rate": 7.995235372593863,
+  "detected": true,
+  "latency_ms": 10.039091110229492,
+  "victim": 790,
+  "seconds": 0.9273309707641602
+ },
+ {
+  "rate": 1.9999523264683448,
+  "detected": true,
+  "latency_ms": 35.006046295166016,
+  "victim": 790,
+  "seconds": 3.115591049194336
+ },
+ {
+  "rate": 9.545164960182024,
+  "detected": true,
+  "latency_ms": 40.0080680847168,
+  "victim": 790,
+  "seconds": 4.731229066848755
+ },
+ {
+  "rate": 3.9409112259276657,
+  "detected": true,
+  "latency_ms": 16.95704460144043,
+  "victim": 790,
+  "seconds": 1.9958539009094238
+ },
+ {
+  "rate": 19.09467455621302,
+  "detected": true,
+  "latency_ms": 0.3027915954589844,
+  "victim": 790,
+  "seconds": 0.2627298831939697
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": true,
+  "latency_ms": 0.0,
+  "victim": 790,
+  "seconds": 1.0655310153961182
+ },
+ {
+  "rate": 18.628330373001777,
+  "detected": true,
+  "latency_ms": 4.005908966064453,
+  "victim": 790,
+  "seconds": 0.4031639099121094
+ },
+ {
+  "rate": 3.9991420400381315,
+  "detected": true,
+  "latency_ms": 20.003795623779297,
+  "victim": 790,
+  "seconds": 2.0505309104919434
+ },
+ {
+  "rate": 12.723991507430998,
+  "detected": true,
+  "latency_ms": 35.85696220397949,
+  "victim": 790,
+  "seconds": 5.471069097518921
+ },
+ {
+  "rate": 19.09467455621302,
+  "detected": true,
+  "latency_ms": 0.0,
+  "victim": 790,
+  "seconds": 0.8559060096740723
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": true,
+  "latency_ms": 1.516103744506836,
+  "victim": 790,
+  "seconds": 1.1773829460144043
+ },
+ {
+  "rate": 38.03354487760653,
+  "detected": true,
+  "latency_ms": 1.3098716735839844,
+  "victim": 790,
+  "seconds": 0.34281492233276367
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": true,
+  "latency_ms": 0.0,
+  "victim": 790,
+  "seconds": 0.41164302825927734
+ },
+ {
+  "rate": 19.09467455621302,
+  "detected": true,
+  "latency_ms": 0.0,
+  "victim": 790,
+  "seconds": 0.4009830951690674
+ },
+ {
+  "rate": 38.17197452229299,
+  "detected": true,
+  "latency_ms": 2.6199817657470703,
+  "victim": 790,
+  "seconds": 0.3673238754272461
+ },
+ {
+  "rate": 16.005723006486075,
+  "detected": true,
+  "latency_ms": 4.8999786376953125,
+  "victim": 790,
+  "seconds": 0.39047884941101074
+ },
+ {
+  "rate": 7.765827471306923,
+  "detected": true,
+  "latency_ms": 10.00213623046875,
+  "victim": 790,
+  "seconds": 2.504073143005371
+ },
+ {
+  "rate": 1.9999523264683448,
+  "detected": true,
+  "latency_ms": 39.9470329284668,
+  "victim": 790,
+  "seconds": 3.280524969100952
+ }
+]

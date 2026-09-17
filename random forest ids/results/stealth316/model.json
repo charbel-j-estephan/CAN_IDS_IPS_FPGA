@@ -1,0 +1,358 @@
+{
+ "feature_set": "no_payload",
+ "feature_names": [
+  "dt_id",
+  "dt_id_dev",
+  "dt_ratio_q6",
+  "dt_bus",
+  "burst",
+  "dlc",
+  "id_rate",
+  "bus_rate"
+ ],
+ "n_trees": 7,
+ "trees": [
+  {
+   "feature": [
+    4,
+    0,
+    0
+   ],
+   "threshold": [
+    0,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  },
+  {
+   "feature": [
+    2,
+    0,
+    0
+   ],
+   "threshold": [
+    8,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  },
+  {
+   "feature": [
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    1310,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  },
+  {
+   "feature": [
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    1441,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  },
+  {
+   "feature": [
+    7,
+    0,
+    1,
+    0,
+    0
+   ],
+   "threshold": [
+    63,
+    0,
+    9198,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    3,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    4,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  },
+  {
+   "feature": [
+    1,
+    0,
+    1,
+    0,
+    0
+   ],
+   "threshold": [
+    9198,
+    0,
+    9762,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    3,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    4,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  },
+  {
+   "feature": [
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    1310,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  }
+ ],
+ "cost": {
+  "internal_nodes": 9,
+  "leaves": 16,
+  "max_depth": 2,
+  "features_used": [
+   0,
+   1,
+   2,
+   4,
+   7
+  ],
+  "n_features_used": 5
+ },
+ "test_metrics": {
+  "accuracy": 0.9953857097752198,
+  "precision": 0.9747467898903712,
+  "recall": 0.9999464971697003,
+  "f1": 0.9871858526742798,
+  "fpr": 0.005600212812713247,
+  "tp": 93448,
+  "tn": 429884,
+  "fp": 2421,
+  "fn": 5
+ }
+}

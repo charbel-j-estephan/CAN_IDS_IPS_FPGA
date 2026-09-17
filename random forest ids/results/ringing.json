@@ -1,0 +1,185 @@
+[
+ {
+  "m": 2.0,
+  "detected": 143,
+  "windows": 143,
+  "worst_ms": 36.340951919555664,
+  "ringing": 4,
+  "false_alarms": 0,
+  "clean_events": 0,
+  "clean_per_hour": 0.0,
+  "per_trace": {
+   "dos": {
+    "windows": 73,
+    "detected": 73,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 6.234884262084961
+   },
+   "zid": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 1,
+    "false_alarms": 0,
+    "worst_ms": 2.8820037841796875
+   },
+   "vid": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 1,
+    "false_alarms": 0,
+    "worst_ms": 3.667116165161133
+   },
+   "s2c0": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 1,
+    "false_alarms": 0,
+    "worst_ms": 3.667116165161133
+   },
+   "s316": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 1,
+    "false_alarms": 0,
+    "worst_ms": 4.192113876342773
+   },
+   "lowrate": {
+    "windows": 7,
+    "detected": 7,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 35.00699996948242
+   },
+   "mixed": {
+    "windows": 43,
+    "detected": 43,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 36.340951919555664
+   }
+  }
+ },
+ {
+  "m": 4.0,
+  "detected": 143,
+  "windows": 143,
+  "worst_ms": 44.67296600341797,
+  "ringing": 4,
+  "false_alarms": 0,
+  "clean_events": 0,
+  "clean_per_hour": 0.0,
+  "per_trace": {
+   "dos": {
+    "windows": 73,
+    "detected": 73,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 12.264013290405273
+   },
+   "zid": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 1,
+    "false_alarms": 0,
+    "worst_ms": 3.406047821044922
+   },
+   "vid": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 1,
+    "false_alarms": 0,
+    "worst_ms": 4.716157913208008
+   },
+   "s2c0": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 1,
+    "false_alarms": 0,
+    "worst_ms": 4.716157913208008
+   },
+   "s316": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 1,
+    "false_alarms": 0,
+    "worst_ms": 5.502223968505859
+   },
+   "lowrate": {
+    "windows": 7,
+    "detected": 7,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 40.00997543334961
+   },
+   "mixed": {
+    "windows": 43,
+    "detected": 43,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 44.67296600341797
+   }
+  }
+ },
+ {
+  "m": 8.0,
+  "detected": 143,
+  "windows": 143,
+  "worst_ms": 60.06503105163574,
+  "ringing": 0,
+  "false_alarms": 0,
+  "clean_events": 0,
+  "clean_per_hour": 0.0,
+  "per_trace": {
+   "dos": {
+    "windows": 73,
+    "detected": 73,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 19.177913665771484
+   },
+   "zid": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 5.502223968505859
+   },
+   "vid": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 7.074117660522461
+   },
+   "s2c0": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 7.074117660522461
+   },
+   "s316": {
+    "windows": 5,
+    "detected": 5,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 7.074117660522461
+   },
+   "lowrate": {
+    "windows": 7,
+    "detected": 7,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 58.40897560119629
+   },
+   "mixed": {
+    "windows": 43,
+    "detected": 43,
+    "ringing": 0,
+    "false_alarms": 0,
+    "worst_ms": 60.06503105163574
+   }
+  }
+ }
+]

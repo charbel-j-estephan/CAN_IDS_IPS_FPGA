@@ -1,0 +1,22 @@
+# Generated traces. Large, and reproducible with src/make_trace.py.
+data/*.csv
+
+# Feature caches and raw frame dumps, reproducible with src/prepare.py.
+results/*/cache.npz
+results/*/raw_test.npz
+results/cache.npz
+
+
+__pycache__/
+*.pyc
+
+# smoke-test scratch output
+results/smoke/
+results/rerun.done
+data/*.txt
+results/*/done
+*.log
+results/viz_data.json
+
+# Pre-extracted evaluation features, reproducible with src/cache_eval.py.
+results/evcache/

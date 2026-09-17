@@ -1,0 +1,243 @@
+{
+ "feature_set": "timing",
+ "feature_names": [
+  "dt_id",
+  "dt_id_dev",
+  "dt_ratio_q6",
+  "hd",
+  "hd_dev",
+  "dt_bus",
+  "burst",
+  "dlc",
+  "pl_violation",
+  "pl_popcount",
+  "id_rate",
+  "bus_rate"
+ ],
+ "n_trees": 3,
+ "trees": [
+  {
+   "feature": [
+    10,
+    2,
+    0,
+    0,
+    6,
+    1,
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    288,
+    12,
+    0,
+    0,
+    0,
+    8289,
+    0,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    2,
+    0,
+    0,
+    5,
+    6,
+    0,
+    0,
+    0
+   ],
+   "right": [
+    4,
+    3,
+    0,
+    0,
+    8,
+    7,
+    0,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    0,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    1
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "hd",
+    "hd_dev",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "pl_violation",
+    "pl_popcount",
+    "id_rate",
+    "bus_rate"
+   ]
+  },
+  {
+   "feature": [
+    9,
+    0,
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    2,
+    1310,
+    0,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    2,
+    0,
+    0,
+    0
+   ],
+   "right": [
+    4,
+    3,
+    0,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    0,
+    1,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1,
+    0,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "hd",
+    "hd_dev",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "pl_violation",
+    "pl_popcount",
+    "id_rate",
+    "bus_rate"
+   ]
+  },
+  {
+   "feature": [
+    9,
+    2,
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    2,
+    9,
+    0,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    2,
+    0,
+    0,
+    0
+   ],
+   "right": [
+    4,
+    3,
+    0,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    0,
+    1,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1,
+    0,
+    0
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "hd",
+    "hd_dev",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "pl_violation",
+    "pl_popcount",
+    "id_rate",
+    "bus_rate"
+   ]
+  }
+ ],
+ "cost": {
+  "internal_nodes": 8,
+  "leaves": 11,
+  "max_depth": 3,
+  "features_used": [
+   0,
+   1,
+   2,
+   6,
+   9,
+   10
+  ],
+  "n_features_used": 6
+ },
+ "test_metrics": {
+  "accuracy": 0.9953857097752198,
+  "precision": 0.9747467898903712,
+  "recall": 0.9999464971697003,
+  "f1": 0.9871858526742798,
+  "fpr": 0.005600212812713247,
+  "tp": 93448,
+  "tn": 429884,
+  "fp": 2421,
+  "fn": 5
+ }
+}

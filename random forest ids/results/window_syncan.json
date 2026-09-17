@@ -1,0 +1,56 @@
+[
+ {
+  "m": 1,
+  "windows": 53,
+  "detected": 53,
+  "median_ms": 0.0,
+  "worst_ms": 3.1847999925957993,
+  "false_alarms": 9286,
+  "per_hour": 19441.778080622444
+ },
+ {
+  "m": 2,
+  "windows": 53,
+  "detected": 53,
+  "median_ms": 3.658400004496798,
+  "worst_ms": 7.220399988000281,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 3,
+  "windows": 53,
+  "detected": 53,
+  "median_ms": 5.751000004238449,
+  "worst_ms": 9.926999977324158,
+  "false_alarms": 2,
+  "per_hour": 4.187331053332423
+ },
+ {
+  "m": 4,
+  "windows": 53,
+  "detected": 53,
+  "median_ms": 7.039600008283742,
+  "worst_ms": 12.228999999933876,
+  "false_alarms": 1,
+  "per_hour": 2.0936655266662116
+ },
+ {
+  "m": 6,
+  "windows": 53,
+  "detected": 53,
+  "median_ms": 10.31790001434274,
+  "worst_ms": 16.981100008706562,
+  "false_alarms": 2,
+  "per_hour": 4.187331053332423
+ },
+ {
+  "m": 8,
+  "windows": 53,
+  "detected": 53,
+  "median_ms": 13.797200008411892,
+  "worst_ms": 23.284599999897182,
+  "false_alarms": 1,
+  "per_hour": 2.0936655266662116
+ }
+]

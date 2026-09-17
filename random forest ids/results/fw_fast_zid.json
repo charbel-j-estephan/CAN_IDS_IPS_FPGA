@@ -1,0 +1,29 @@
+[
+ {
+  "m": 2,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 1.0480880737304688,
+  "worst_ms": 1.310110092163086,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 4,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 2.0961761474609375,
+  "worst_ms": 2.3581981658935547,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 8,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 3.406047821044922,
+  "worst_ms": 4.716157913208008,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ }
+]
