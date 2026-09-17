@@ -177,6 +177,38 @@ def main() -> None:
             })
         payload.setdefault("rate_floor", {})[mdl] = bands
 
+    # the shipped detector's own numbers, straight from final_report.py, so
+    # the page cannot show a model the repo no longer ships
+    fr = os.path.join(args.results, "final_report.json")
+    if os.path.exists(fr):
+        with open(fr) as fh:
+            payload["final"] = json.load(fh)
+
+    ADV = {"phase": "exact-midpoint phasing, 2x",
+           "creep": "creep at 1.2x the victim's rate",
+           "rampup": "ramp from 1.2x to 8x",
+           "single": "one injected frame"}
+    adv = []
+    for tag, label in ADV.items():
+        f = os.path.join(args.results, f"final_adv_{tag}.json")
+        if not os.path.exists(f):
+            continue
+        with open(f) as fh:
+            d = json.load(fh)
+        r = [x for x in d["rows"] if x["m"] == 2]
+        if not r:
+            continue
+        r = r[0]
+        adv.append({"tag": tag, "label": label,
+                    "windows": r["windows"], "detected": r["detected"],
+                    "median_ms": r["median_ms"], "worst_ms": r["worst_ms"],
+                    "false_alarms": r["false_alarms"],
+                    "per_hour": r["per_hour"],
+                    "clean_minutes": d["clean_minutes"],
+                    "attack_percent": d["attack_percent"]})
+    if adv:
+        payload["adversarial"] = adv
+
     for path in sorted(glob.glob(os.path.join(args.results, "cross_eval*.json"))):
         name = os.path.basename(path).replace(".json", "")
         with open(path) as fh:
@@ -192,6 +224,8 @@ def main() -> None:
     print(f"  windows     {payload.get('window_order', [])}")
     print(f"  firmware    {list(payload.get('firmware', {}))}")
     print(f"  rate_floor  {list(payload.get('rate_floor', {}))}")
+    print(f"  final       {'yes' if 'final' in payload else 'no'}"
+          f", adversarial {len(payload.get('adversarial', []))} modes")
 
 
 if __name__ == "__main__":

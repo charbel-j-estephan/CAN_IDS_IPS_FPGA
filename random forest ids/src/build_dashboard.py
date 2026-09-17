@@ -57,6 +57,14 @@ def main() -> None:
 
     # The alarm table shows the DEPLOYED model over every trace, so it cannot
     # drift away from what is actually shipped.
+    # The shipped detector's results come straight from final_report.py. The
+    # trained-forest tables below it are kept as the comparison that justifies
+    # not shipping one.
+    if "final" in v:
+        D["final"] = v["final"]
+    if "adversarial" in v:
+        D["adversarial"] = v["adversarial"]
+
     fw = v.get("firmware", {})
     dep = fw.get(args.model)
     if dep is None:
@@ -103,6 +111,13 @@ def main() -> None:
     print(f"  deployed model  {args.model}: {D['models'][args.model]['trees']} "
           f"trees, {D['models'][args.model]['nodes']} comparators")
     print(f"  alarm traces    {D['window_order']}")
+    if "final" in D:
+        t = D["final"]["totals"]
+        print(f"  shipped         {D['final']['comparators']} comparators, "
+              f"{t['detected']}/{t['windows']} windows, "
+              f"{t['false_alarms']} false alarms")
+    for a in D.get("adversarial", []):
+        print(f"    {a['label']:34s} {a['detected']}/{a['windows']}")
     tot = {}
     for t in D["window_order"]:
         for r in D["windows"][t]["rows"]:

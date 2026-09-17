@@ -19,4 +19,4 @@ results/*/done
 results/viz_data.json
 
 # Pre-extracted evaluation features, reproducible with src/cache_eval.py.
-results/evcache/
+results/evcache*/

@@ -119,18 +119,63 @@ footer a{color:var(--ink-2)}
 
 <header>
   <h1>How small can a CAN flood detector get?</h1>
-  <p class="lede">A random forest that flags injected CAN frames, and the alarm
-  layer above it. Trained on one contiguous slice of a capture and tested on a
-  disjoint later slice, never on shuffled rows. Every figure here is measured on
-  held-out data, across the real HCRL capture, six floods built over real
-  attack-free traffic at five different injection rates and against two
-  different victim IDs, and an independent benchmark.</p>
+  <p class="lede">Three comparators on two features, and the alarm layer above
+  them. The question was how small a per-frame CAN intrusion detector can get,
+  and the answer turned out to be smaller than a random forest &mdash; the
+  forests are further down, as the comparison that justifies not shipping one.
+  Every figure here is measured on held-out data: the real HCRL capture, floods
+  built over real attack-free traffic across five injection rates and two
+  victim IDs, an hour at a realistic 1.8&nbsp;% attack duty, four attacks
+  written specifically to defeat it, and an independent benchmark from a
+  different vehicle.</p>
   <p class="stamp" id="stamp"></p>
 </header>
 
+<section id="ship">
+  <h2>What ships</h2>
+  <h3 id="shiphead"></h3>
+  <p>Two features, both scale-free: <span class="mono">id_rate</span> is this
+  ID's sustained rate where <strong>64 means its normal rate</strong>, and
+  <span class="mono">dt_ratio_q6</span> is the current gap in 64ths of its
+  normal gap. A threshold in those units means the same thing on a 10 ms ID, a
+  1 s ID, and a different vehicle.</p>
+  <div class="panel" id="rulebox"></div>
+  <div class="tiles" id="shiptiles"></div>
+  <div class="tw panel">
+    <table>
+      <caption class="sr">The shipped detector on every evaluation trace</caption>
+      <thead><tr><th>Trace</th><th>Windows</th><th>Detected</th>
+        <th>Median</th><th>Worst</th><th>False alarms</th></tr></thead>
+      <tbody id="shiptab"></tbody>
+    </table>
+  </div>
+  <p style="margin-top:14px" id="shipline"></p>
+  <div class="note">
+    <p id="shipnote"></p>
+  </div>
+
+  <h3 style="margin-top:34px">The attacks built to defeat it</h3>
+  <p>These were written to break it rather than to be caught.
+  <em>Exact-midpoint phasing</em> is the one to beat: every injected frame sits
+  precisely halfway between two of the victim's real frames, so the arrival
+  pattern stays perfectly regular and the rate never exceeds 2&times;.</p>
+  <div class="tw panel">
+    <table>
+      <thead><tr><th>Attack</th><th>Windows</th><th>Caught</th>
+        <th>Median</th><th>Worst</th><th>False alarms/hour</th></tr></thead>
+      <tbody id="advtab"></tbody>
+    </table>
+  </div>
+  <div class="note">
+    <p>The single-frame row is the honest floor, not a tuning failure. An alarm
+    that waits for corroborating evidence cannot fire on one frame. If one
+    injected frame has to be caught, this is the wrong architecture.</p>
+  </div>
+</section>
+
 <section>
   <h2>The result</h2>
-  <h3>Every attack window caught, in milliseconds, with no false alarms</h3>
+  <h3>Why alarms, and not per-frame accuracy</h3>
   <p>Per-frame accuracy is the wrong final metric. The residual per-frame error
   is the flooded ID's own frames arriving at the flood period, and those are
   <em>scattered singles</em>. An IDS does not act on one frame: it raises an
@@ -405,6 +450,94 @@ document.getElementById("mhead").textContent =
 document.getElementById("rhead").textContent =
   "What the " + M.nodes + " comparators actually test";
 
+/* ---------- what ships ---------- */
+(function () {
+  const F = D.final;
+  if (!F) { document.getElementById("ship").hidden = true; return; }
+  const c = F.calibration || {};
+  const t = F.totals;
+
+  document.getElementById("shiphead").textContent =
+    "A CAN flood detector in " + F.comparators +
+    (F.comparators === 1 ? " comparator" : " comparators");
+
+  document.getElementById("rulebox").innerHTML =
+    `<div class="cap" style="font-size:11px;text-transform:uppercase;
+       letter-spacing:.07em;color:var(--muted);font-weight:620;
+       margin-bottom:9px">the whole classifier</div>
+     <pre style="font-size:14px"><span class="f">id_rate</span> &gt; ${
+       c.id_rate_threshold} &nbsp;<span style="opacity:.6">OR</span>&nbsp; <span
+       class="f">dt_ratio_q6</span> &le; ${c.dt_ratio_threshold}</pre>
+     <p style="margin:12px 0 0;font-size:13.5px">Calibrated on ${
+       int(c.clean_frames)} frames of attack-free traffic, with
+       <strong>no attack data of any kind</strong>. Across those frames
+       <span class="mono">id_rate</span> never exceeds
+       <strong>${c.id_rate_clean_max}</strong>; under a 2&times; midpoint flood
+       it sits at 131 to 140.</p>`;
+
+  document.getElementById("shiptiles").innerHTML = [
+    ["Attack windows caught", t.detected + " / " + t.windows,
+     "across " + F.traces.length + " traces"],
+    ["False alarms", int(t.false_alarms),
+     Math.round(t.clean_minutes) + " min of clean traffic"],
+    ["Comparators", F.comparators, F.features.length + " features"],
+    ["Stuck alarms", t.stale_windows,
+     "windows opening on a running alarm"],
+  ].map(([k, v, sub]) =>
+    `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>
+     <div class="s">${sub}</div></div>`).join("");
+
+  const ms = x => (x === null || x === undefined) ? "&mdash;"
+                                                 : x.toFixed(1) + " ms";
+  document.getElementById("shiptab").innerHTML = F.traces.map(r => {
+    const all = r.detected === r.windows;
+    return `<tr class="${all ? "" : "flag"}">
+      <td>${r.label}<div style="font-size:11.5px;color:var(--muted)">${
+        r.note}</div></td>
+      <td>${r.windows}</td>
+      <td class="pill-cell"><span class="pill ${all ? "ok" : "no"}">${
+        r.detected} / ${r.windows}</span></td>
+      <td>${ms(r.median_ms)}</td><td>${ms(r.worst_ms)}</td>
+      <td>${r.false_alarms}</td></tr>`;
+  }).join("");
+
+  const slowest = F.traces.reduce((a, r) =>
+    ((r.worst_ms || 0) > (a.worst_ms || 0) ? r : a), F.traces[0]);
+  const rest = F.traces.filter(r => r !== slowest);
+  const restWorst = Math.max(...rest.map(r => r.worst_ms || 0));
+  document.getElementById("shipline").innerHTML =
+    `<strong>${t.detected} of ${t.windows} attack windows</strong>, the slowest
+     within <strong>${(t.worst_ms).toFixed(1)} ms</strong>, for
+     <strong>${t.false_alarms === 0 ? "no false alarms at all"
+                                    : int(t.false_alarms) + " false alarms"}</strong>
+     across ${Math.round(t.clean_minutes)} minutes of clean traffic.`;
+
+  const ctl = F.control;
+  document.getElementById("shipnote").innerHTML =
+    `The worst case is one attack on a 1 s period ID, and it is arithmetic
+     rather than tuning: flooded at 5&times; that ID is injected every 200 ms,
+     so two corroborating frames take 400 ms to arrive. Set that one trace
+     aside and nothing exceeds
+     <strong>${restWorst.toFixed(1)} ms</strong> on any trace. ` +
+    (ctl ? `The control settles the false-alarm number: on
+      ${int(ctl.frames)} frames with no attack anywhere in them, where every
+      alarm would be false by construction, the detector flags
+      <strong>${ctl.frame_fp}</strong> frames and raises
+      <strong>${ctl.false_alarms}</strong> alarms.` : "");
+
+  const A = D.adversarial || [];
+  document.getElementById("advtab").innerHTML = A.map(a => {
+    const all = a.detected === a.windows;
+    const floor = a.tag === "single";
+    return `<tr class="${all || floor ? "" : "flag"}">
+      <td>${a.label}</td><td>${a.windows}</td>
+      <td class="pill-cell"><span class="pill ${all ? "ok" : "no"}">${
+        a.detected} / ${a.windows}</span></td>
+      <td>${ms(a.median_ms)}</td><td>${ms(a.worst_ms)}</td>
+      <td>${a.per_hour.toFixed(2)}</td></tr>`;
+  }).join("");
+})();
+
 /* ---------- alarm-level results ---------- */
 let MTH = 8;
 (function () {
@@ -465,11 +598,16 @@ let MTH = 8;
   window.paintWindows = paintWindows;
   paintWindows();
 
-  const tw = ORD.reduce((a, k) =>
+  const F = D.final;
+  const tw = F ? F.totals.windows : ORD.reduce((a, k) =>
     a + (W[k].rows[0] ? W[k].rows[0].windows : 0), 0);
+  const nt = F ? F.traces.length : ORD.length;
+  const adv = (D.adversarial || []).reduce((a, x) => a + x.windows, 0);
   document.getElementById("stamp").textContent =
-    tw + " attack windows \u00b7 " + ORD.length +
-    " traces \u00b7 majority-vote scoring";
+    tw + " attack windows \u00b7 " + nt + " traces" +
+    (adv ? " \u00b7 " + adv + " more in purpose-built attacks" : "") +
+    " \u00b7 " + Math.round(F ? F.totals.clean_minutes : 0) +
+    " min of clean traffic";
 })();
 
 /* ---------- one rate vs many rates ---------- */
