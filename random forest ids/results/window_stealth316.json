@@ -1,0 +1,56 @@
+[
+ {
+  "m": 1,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 0.2999305725097656,
+  "worst_ms": 0.7851123809814453,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 2,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 1.310110092163086,
+  "worst_ms": 1.8341541290283203,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 3,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 1.8341541290283203,
+  "worst_ms": 2.3581981658935547,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 4,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 2.3581981658935547,
+  "worst_ms": 3.1430721282958984,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 6,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 3.1440258026123047,
+  "worst_ms": 4.192113876342773,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ },
+ {
+  "m": 8,
+  "windows": 5,
+  "detected": 5,
+  "median_ms": 3.668069839477539,
+  "worst_ms": 5.502223968505859,
+  "false_alarms": 0,
+  "per_hour": 0.0
+ }
+]

@@ -43,7 +43,6 @@ FEATURES
                  datapath.
  13 bus_rate     the same bucket for the bus as a whole, against the nominal
                  frame interval learned from clean traffic. One register.
-
 The two rate features exist because during a sustained flood of one ID, every
 frame carrying that ID arrives at the flood period, injected or not. dt_id
 therefore separates nothing for the victim ID. A bucket integrates over many

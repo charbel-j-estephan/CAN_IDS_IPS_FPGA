@@ -309,6 +309,110 @@ inside an attacked window is labelled attack, so no per-frame detector can score
 100 % against these labels. The bus-rate feature happens to fire for every ID
 during a flood, which is why the numbers land as high as they do.
 
+## Alarms, not frames
+
+Per-frame accuracy is the wrong final metric, and fixing that is the single
+biggest improvement in this project. The residual per-frame error is the flooded
+ID's own frames arriving at the flood period, which are ambiguous one frame at a
+time and are *scattered singles*. An IDS does not act on one frame: it raises an
+alarm on an ID, and a node exclusion system acts on that ID.
+
+`src/eval_windows.py` adds that layer. Per ID, a leaky integrator: a flagged
+frame adds one, the score bleeds off with elapsed time, and the ID alarms while
+the score is at or above a threshold. A small counter and a timestamp per ID.
+Scattered false positives decay before the next one arrives; a flood crosses the
+threshold in milliseconds.
+
+At threshold 4:
+
+| trace | windows | detected | worst detect | false alarms/hour |
+|---|---|---|---|---|
+| real HCRL DoS capture | 73 | **73 / 73** | 6.7 ms | 0.00 |
+| real traffic + `0x000` flood | 5 | 5 / 5 | 2.4 ms | 0.00 |
+| real traffic + valid-ID flood | 5 | 5 / 5 | 3.1 ms | 0.00 |
+| real traffic + stealth on `0x2c0` | 5 | 5 / 5 | 3.1 ms | 0.00 |
+| real traffic + stealth on `0x316` | 5 | 5 / 5 | 3.1 ms | 0.00 |
+| SynCAN flooding (independent) | 53 | **53 / 53** | 12.2 ms | 2.09 |
+
+**146 of 146 attack windows, every trace, worst case 12.2 ms.** Zero false
+alarms across 1544 s of clean HCRL-derived traffic, and one across 1719 s of
+SynCAN. The 2421 per-frame false positives produce no false alarms at all,
+because every one of them falls *inside* a window on an ID that genuinely is
+under attack. Counting them as errors was an artefact of the per-frame framing.
+
+Two things to keep straight about latency. The per-frame verdict is immediate.
+The *alarm* takes 2 to 12 ms because it deliberately waits for corroborating
+frames, and that wait is what buys the zero false-alarm rate. Threshold 1 fires
+instantly and is useless: on SynCAN it produces 19 442 false alarms an hour.
+Threshold 2 to 4 is the usable band.
+
+### The bug that made this worth checking twice
+
+The first version of this used a shift register of the last N verdicts per ID
+instead of a time decay. It reported **1 of 73 windows detected on a trace where
+the model was perfect frame by frame**, which is impossible and therefore
+diagnostic. An attacker's ID goes silent between floods, so its register never
+gets a zero pushed in, the alarm latches forever, and every window after the
+first is scored as already-alarming rather than newly detected. SynCAN showed
+the same bug as false-alarm counts that were not monotonic in the threshold.
+The rule now decays with elapsed time and clears an ID that has fallen silent.
+
+## Which features actually earn their place
+
+Measured by running the sweep with the group removed:
+
+| trace | with payload features | without any |
+|---|---|---|
+| real HCRL DoS | 100.0000 % @ 2 nodes | 100.0000 % @ 2 nodes |
+| `0x000` flood | 100.0000 % @ 1 node | 100.0000 % @ 1 node |
+| **valid-ID flood** | **99.9996 % @ 5** | **99.5386 % @ 8** |
+| stealth on `0x2c0` | 99.5386 % | 99.5386 % |
+| stealth on `0x316` | 99.5386 % @ 9 | 99.5386 % @ 8 |
+| SynCAN flooding | 97.1062 % | 97.1126 % |
+
+Payload features earn their place in exactly one scenario: a flood that reuses a
+legitimate ID but with a degenerate, all-zero payload. Against an attacker who
+replays valid payloads they contribute nothing measurable.
+
+That is a real design choice with a measured price. Dropping them removes the
+64-bit last-payload state and the 135 bits of per-ID payload ROM, about 71 % of
+the per-ID memory, and costs 0.46 points on the lazy valid-ID flood alone. The
+`no_payload` feature set is there for that trade.
+
+### A feature that did not earn its place
+
+The payload features leave the victim's own in-flood frames unresolved, so a
+purpose-built one was tried: a *gated* per-ID payload tracker, which follows the
+ID's signal trajectory and folds in only samples already close to its estimate,
+on the theory that it stays locked on the smooth legitimate signal and treats
+replayed samples as outliers.
+
+Measured inside attack windows, on the flooded ID alone, it separates the
+victim's frames from the injected ones at AUC 0.634. For comparison,
+`dt_ratio_q6` already there manages 0.929:
+
+| feature | AUC, in-window, on the flooded ID |
+|---|---|
+| `dt_ratio_q6` | **0.929** |
+| `burst` | 0.726 |
+| `pl_violation` | 0.663 |
+| the gated tracker | 0.634 |
+| `hd`, `hd_dev` | 0.554 |
+
+The sweep confirmed it: on the `0x316` flood the front with the tracker and the
+front without it are identical to the frame, 99.538571 % and the same 2421 false
+positives either way. It was removed. Recorded here because the negative result
+is the useful part: the timing features are at the information limit for
+per-frame discrimination inside a flood, and no payload feature moves it. What
+moves it is the alarm layer above.
+
+One measurement from that experiment is worth keeping: `0x2c0`, the ID the
+original stealth trace floods, carries a *single constant payload* in the real
+capture. Replaying it is indistinguishable by construction. `0x316` was added as
+a second victim precisely because it carries a smoothly varying signal, 50.9 %
+unique payloads with a median consecutive step of 2, and it is the realistic
+spoofing target. The conclusion holds on both.
+
 ## Reading the trees
 
 `src/show_trees.py` prints any frozen forest as trees you can follow by eye,
@@ -449,6 +553,7 @@ src/report.py          markdown report of every sweep
 src/show_trees.py      print a frozen forest as readable trees
 src/syncan_data.py     loader for the SynCAN benchmark
 src/export_viz_data.py collect every result into one JSON for charting
+src/eval_windows.py    score alarms per attack window, not frames
 src/cross_eval.py      score one frozen model against other attack styles
 src/attack_on_real.py  inject a flood into HCRL's real attack-free capture
 run_all.sh             CSV in, trained forest out
