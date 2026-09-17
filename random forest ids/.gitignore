@@ -20,3 +20,4 @@ rtl/smoke/
 results/rerun.done
 data/*.txt
 results/*/done
+*.log

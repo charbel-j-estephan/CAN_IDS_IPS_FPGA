@@ -260,17 +260,46 @@ budget               1 ms per frame
 margin               25 000x
 ```
 
-Latency is fixed, not data dependent: the forest is unrolled combinationally, so
-there is no worst-case path to argue about. The detector ceiling is 25 M
-frames/s against a CAN 1 Mbit/s ceiling of about 21 k frames/s, so the bus is the
-bottleneck by three orders of magnitude.
+Latency is fixed, not data dependent: the forest is unrolled combinationally,
+so there is no worst-case path to argue about. The detector ceiling is 25 M
+frames/s against a CAN 1 Mbit/s ceiling of about 21 k frames/s, so the bus is
+the bottleneck by three orders of magnitude.
 
-Memory is 2048 IDs x 97 bits of per-ID state plus 2048 x 172 bits of baseline
-ROM, about 67 kB, a handful of 18 kbit BRAMs. Real vehicles use around 30 IDs,
-so a smaller direct-mapped table or a CAM shrinks this a lot if needed.
+### Area, measured
 
-The tree count is kept odd throughout so the majority voter cannot tie, which is
-the same constraint the reference hardware design imposes.
+Synthesised with yosys 0.33, `synth_xilinx -family xc7`, on the recommended
+3-tree model. Parse any run with `src/syn_report.py`:
+
+| module | LUT | FF | RAMB36 | RAMB18 | DSP48 | CARRY4 |
+|---|---|---|---|---|---|---|
+| `can_ids_features` | 785 | 320 | 11 | 11 | 2 | 58 |
+| `rf_forest` | 25 | 2 | 0 | 0 | 0 | 2 |
+| **total** | **810** | **322** | **11** | **11** | **2** | **60** |
+
+33 BRAM18 equivalents, plus 8 distributed `RAM256X1S`.
+
+**The forest is 3.1 % of the LUTs.** The trees are nearly free. The feature
+extractor and its per-ID memories are the entire design, which is the strongest
+form of the argument for keeping the forest small: a bigger forest buys almost
+nothing in accuracy and costs almost nothing in area, so the interesting
+engineering is all in the features.
+
+Two earlier estimates in this file were wrong and are corrected above: the LUT
+count was understated by about 1.9x, and the reciprocal multiply was given as
+one DSP48 when the design uses two, the second being the rate bucket.
+
+Synthesise against a real architecture. Generic `synth` has no block-RAM
+primitive, so it maps the 2048-entry per-ID arrays to flip-flops and reports
+458 128 cells with 221 623 registers. That measures the target, not the design.
+
+### The obvious next optimisation
+
+Memory is dominated by the 2048-entry direct-mapped ID table, 562 kbit of which
+the real captures use 27 entries. An ID-to-slot index ROM (2048 x 5 bit) feeding
+a 32-entry table would cut that to roughly 2 BRAM18, a 16x reduction, at the
+cost of one more pipeline cycle. Not done here: 33 BRAM18 already fits
+comfortably on a mid-range part (an Artix-7 35T has 100), and the change would
+need the RTL re-verified. Worth doing for a small or cost-sensitive target.
 
 ## Verification
 
