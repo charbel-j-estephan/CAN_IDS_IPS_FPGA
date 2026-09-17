@@ -1,0 +1,139 @@
+{
+ "feature_set": "per_id",
+ "feature_names": [
+  "dt_ratio_q6",
+  "id_rate"
+ ],
+ "n_trees": 3,
+ "trees": [
+  {
+   "feature": [
+    1,
+    0,
+    0
+   ],
+   "threshold": [
+    80,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1
+   ],
+   "feature_names": [
+    "dt_ratio_q6",
+    "id_rate"
+   ]
+  },
+  {
+   "feature": [
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    39,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    1,
+    0
+   ],
+   "feature_names": [
+    "dt_ratio_q6",
+    "id_rate"
+   ]
+  },
+  {
+   "feature": [
+    1,
+    0,
+    0
+   ],
+   "threshold": [
+    80,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    0,
+    0
+   ],
+   "right": [
+    2,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1
+   ],
+   "feature_names": [
+    "dt_ratio_q6",
+    "id_rate"
+   ]
+  }
+ ],
+ "cost": {
+  "internal_nodes": 3,
+  "leaves": 6,
+  "max_depth": 1,
+  "features_used": [
+   0,
+   1
+  ],
+  "n_features_used": 2
+ },
+ "calibration": {
+  "clean_frames": 988871,
+  "id_rate_clean_max": 71,
+  "id_rate_threshold": 80,
+  "dt_ratio_clean_min": 32,
+  "dt_ratio_threshold": 39,
+  "dt_ratio_clean_below_threshold": 105,
+  "rate_margin": 1.12,
+  "ratio_quantile": 0.01,
+  "trained_on_attacks": false
+ }
+}
