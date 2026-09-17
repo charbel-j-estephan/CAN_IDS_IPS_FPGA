@@ -1,7 +1,7 @@
 """Hardware-faithful feature extraction for a streaming CAN IDS.
 
-Every feature here is computable in a single pass, per frame, from state the
-FPGA can hold in one BRAM indexed by the 11-bit CAN ID:
+Every feature here is computable in a single streaming pass, one frame at a
+time, from a small amount of state kept per CAN ID:
 
     per-ID RAM (2048 entries)      per-ID ROM (trained offline)
       last_timestamp_us  (20b)       mean_interval_us   (20b)
@@ -101,6 +101,11 @@ FEATURE_SETS = {
     # gain from them is measurable rather than asserted
     "no_rate": ["dt_id", "dt_id_dev", "dt_ratio_q6", "hd", "hd_dev",
                 "dt_bus", "burst", "dlc", "pl_violation", "pl_popcount"],
+    # timing and rate only, no payload at all. For datasets that give signal
+    # values rather than raw payload bytes, where anything payload-derived
+    # would describe a reconstruction instead of the real frame.
+    "no_payload": ["dt_id", "dt_id_dev", "dt_ratio_q6", "dt_bus", "burst",
+                   "dlc", "id_rate", "bus_rate"],
     # the two features the reference paper uses
     "paper": ["dt_id_dev", "hd_dev"],
 }
@@ -109,7 +114,7 @@ _POPCNT8 = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
 
 
 def popcount64(x: np.ndarray) -> np.ndarray:
-    """Bit count of a uint64 array, via a byte table (what HW does in LUTs)."""
+    """Bit count of a uint64 array, via a byte lookup table."""
     b = np.ascontiguousarray(x.astype(np.uint64)).view(np.uint8)
     return _POPCNT8[b].reshape(-1, 8).sum(axis=1).astype(np.int64)
 
@@ -134,7 +139,7 @@ class Baseline:
         return set(self.mean_interval)
 
     def as_tables(self):
-        """Dense tables the Verilog ROM is initialised from."""
+        """Dense per-ID lookup tables, indexed by the 11-bit CAN ID."""
         n = 2048
         mean_int = np.zeros(n, dtype=np.int64)
         recip = np.zeros(n, dtype=np.int64)
@@ -237,8 +242,7 @@ def _rate_buckets(can_id, dt_ratio, bus_ratio):
                  b    = min(CAP_RATE, b - leak + RATE_INC)
 
     A genuine recurrence with clamping, so it cannot be vectorised. It is one
-    small multiply, one subtract and one add per frame, which is exactly what
-    the RTL does.
+    small multiply, one subtract and one add per frame.
     """
     n = len(can_id)
     id_rate = np.empty(n, dtype=np.int32)

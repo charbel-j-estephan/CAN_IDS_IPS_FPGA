@@ -1,9 +1,9 @@
 """Print a frozen forest as readable decision trees.
 
-`model.json` holds the trees as integer node tables, which is what the Verilog
-generator and the reference predictor consume but is not something you can read.
-This renders the same thing as a tree you can follow by eye, and translates each
-threshold into physical units so the numbers mean something.
+`model.json` holds the trees as integer node tables, which is what the
+reference predictor consumes but is not something you can read. This renders the
+same thing as a tree you can follow by eye, and translates each threshold into
+physical units so the numbers mean something.
 """
 
 from __future__ import annotations
@@ -89,8 +89,8 @@ def main() -> None:
     print(f"  The frame is flagged when at least {majority} of the {n} trees "
           f"vote ATTACK.")
     print("  Tree counts are always odd so the vote cannot tie.")
-    print("  All trees are evaluated at the same instant in hardware, not one")
-    print("  after another, so the whole forest costs a single clock cycle.")
+    print("  Every comparison depends only on the feature vector, so nothing")
+    print("  about the evaluation is sequential and depth costs very little.")
     print()
     print("THE FEATURES THESE TREES TEST")
     used = sorted({names[tree["feature"][i]]

@@ -23,6 +23,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
 from can_data import load_hcrl_csv, truncate          # noqa: E402
+from syncan_data import load_syncan_csv               # noqa: E402
 from features import extract, fit_baseline            # noqa: E402
 
 TRAIN_SPAN = (0.00, 0.45)
@@ -32,14 +33,18 @@ TEST_SPAN = (0.55, 1.00)
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", required=True)
+    ap.add_argument("--format", default="hcrl", choices=["hcrl", "syncan"],
+                    help="hcrl reads the car-hacking CSV layout; syncan reads "
+                         "the SynCAN signal-level layout")
     ap.add_argument("--out", default="results/cache.npz")
     ap.add_argument("--baseline-out", default="results/baseline.json")
     ap.add_argument("--raw-out", default="",
-                    help="optional npz of the raw test frames, used by the "
-                         "end-to-end RTL testbench")
+                    help="optional npz of the raw test frames, for replaying "
+                         "a trace through an external implementation")
     args = ap.parse_args()
 
-    df = load_hcrl_csv(args.csv)
+    loader = load_hcrl_csv if args.format == "hcrl" else load_syncan_csv
+    df = loader(args.csv)
     print(f"loaded {len(df)} frames, {df.label.mean() * 100:.2f} % injected")
 
     tr = truncate(df, *TRAIN_SPAN)

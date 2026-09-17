@@ -1,12 +1,13 @@
 """Score one frozen model against traces it was not trained on.
 
-This is the deployment question. The FPGA is burned with one forest and one set
-of baseline ROM contents. If an attacker switches from flooding 0x000 to
-flooding a legitimate ID, or starts replaying valid payloads, that same burned
+This is the deployment question. A deployed detector carries one forest and one
+set of per-ID baseline tables. If an attacker switches from flooding 0x000 to
+flooding a legitimate ID, or starts replaying valid payloads, that same frozen
 model has to cope. Retraining per attack style is not an option in the field.
 
 So the features here are deliberately extracted with the *training* dataset's
-baseline, not each trace's own, because the baseline is ROM.
+baseline, not each trace's own, because that baseline is part of the frozen
+artefact.
 """
 
 from __future__ import annotations
@@ -42,8 +43,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
     ap.add_argument("--baseline", required=True,
-                    help="the baseline the model was trained with, i.e. what "
-                         "would actually be burned into ROM")
+                    help="the baseline the model was trained with, i.e. the "
+                         "one that ships with it")
     ap.add_argument("--traces", nargs="+", required=True,
                     help="name=path.csv pairs")
     ap.add_argument("--out", default="")

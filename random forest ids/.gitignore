@@ -6,18 +6,14 @@ results/*/cache.npz
 results/*/raw_test.npz
 results/cache.npz
 
-# Simulation vectors, reproducible with src/export_verilog.py.
-rtl/*/vectors.txt
-rtl/*/top_vectors.txt
-*.vvp
 
 __pycache__/
 *.pyc
 
 # smoke-test scratch output
 results/smoke/
-rtl/smoke/
 results/rerun.done
 data/*.txt
 results/*/done
 *.log
+results/viz_data.json

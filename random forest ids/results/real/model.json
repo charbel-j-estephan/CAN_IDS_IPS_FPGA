@@ -14,20 +14,6 @@
   "id_rate",
   "bus_rate"
  ],
- "feature_widths": [
-  20,
-  20,
-  12,
-  7,
-  7,
-  16,
-  4,
-  4,
-  7,
-  7,
-  12,
-  12
- ],
  "n_trees": 7,
  "trees": [
   {

@@ -1,6 +1,0 @@
-read_verilog can_ids_features.v
-read_verilog rf_forest.v
-read_verilog can_ids_top.v
-hierarchy -top can_ids_top
-synth_xilinx -family xc7 -top can_ids_top
-stat

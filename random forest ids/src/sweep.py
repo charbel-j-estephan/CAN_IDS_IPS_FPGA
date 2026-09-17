@@ -1,13 +1,11 @@
-"""Sweep forest geometry and report the accuracy versus hardware-cost front.
+"""Sweep forest geometry and report the accuracy versus model-size front.
 
-What the FPGA actually pays for:
-  area    ~ total internal (comparator) nodes summed over all trees
-  latency ~ the depth of the deepest tree, one cycle per level
-  memory  ~ nodes x (feature index + threshold + child pointers)
+Size is measured as the total number of internal (comparator) nodes summed over
+all trees, not as tree count, because that is what actually grows: a forest of
+many shallow trees can be smaller than one deep tree. Depth is tracked
+separately since it is close to free.
 
-So the search minimises total nodes and depth, not tree count alone. Tree
-counts are kept odd: the majority voter needs to avoid ties, which is the same
-constraint the reference hardware design imposes.
+Tree counts are kept odd so the majority vote cannot tie.
 """
 
 from __future__ import annotations
@@ -25,18 +23,14 @@ from sklearn.ensemble import RandomForestClassifier
 sys.path.insert(0, os.path.dirname(__file__))
 from features import FEATURE_SETS                      # noqa: E402
 
-CLK_MHZ = 100.0
-PIPELINE_OVERHEAD = 4     # BRAM read, feature compute, vote, register out
-
-
 def majority_predict(clf, X) -> np.ndarray:
     """Hard majority vote over the trees, which is what the hardware does.
 
     RandomForestClassifier.predict averages per-tree class *probabilities* and
-    then takes the argmax. The voter in the RTL cannot do that: it sees one bit
-    per tree and counts. The two agree on shallow, cleanly separated trees and
-    diverge once leaves are mixed, so scoring with sklearn's own predict would
-    report an accuracy the hardware does not actually achieve.
+    then takes the argmax. This project scores a hard majority vote instead:
+    each tree gives one bit and the bits are counted. The two agree on shallow,
+    cleanly separated trees and diverge once leaves are mixed, so the rule used
+    to score has to be the rule the frozen model uses.
     """
     votes = np.zeros(len(X), dtype=np.int32)
     for est in clf.estimators_:
@@ -121,7 +115,6 @@ def main() -> None:
             cost = forest_cost(clf)
             m_te = score(yte, majority_predict(clf, Xte))
             m_tr = score(ytr, majority_predict(clf, Xtr))
-            cycles = cost["max_depth"] + PIPELINE_OVERHEAD
             rows.append(
                 {
                     "feature_set": set_name,
@@ -138,8 +131,6 @@ def main() -> None:
                     "test_fp": m_te["fp"],
                     "test_fn": m_te["fn"],
                     "train_accuracy": m_tr["accuracy"],
-                    "cycles_per_frame": cycles,
-                    "latency_us_at_100mhz": cycles / CLK_MHZ,
                 }
             )
             print(

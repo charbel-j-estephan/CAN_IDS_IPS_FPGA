@@ -3,8 +3,7 @@
 Two selection policies.
 
   --policy smallest   accuracy >= target, then fewest comparator nodes, then
-                      shallowest, then fewest trees. Gives the absolute minimum
-                      hardware.
+                      shallowest, then fewest trees. Gives the smallest model.
 
   --policy robust     accuracy >= target, then the most distinct features split
                       on, then fewest nodes, and at least 3 trees. This is the
@@ -12,9 +11,7 @@ Two selection policies.
                       onto a single comparator. That scores perfectly and is a
                       bad thing to deploy: one feature carries the whole verdict,
                       so an attacker who defeats that one feature defeats the
-                      IDS outright, and a single tree has no vote to lose. A few
-                      extra comparators buy graceful degradation for free at
-                      this scale.
+                      IDS outright, and a single tree has no vote to lose.
 
 The frozen model is written as integer node tables. Because every feature is an
 integer, an sklearn split "x <= 2.5" is exactly "x <= 2", so the thresholds
@@ -35,14 +32,6 @@ from sklearn.ensemble import RandomForestClassifier
 sys.path.insert(0, os.path.dirname(__file__))
 from features import FEATURE_SETS                          # noqa: E402
 from sweep import forest_cost, majority_predict, score      # noqa: E402
-
-# Bit widths the RTL uses for each feature, matching features.py saturation.
-FEATURE_WIDTH = {
-    "dt_id": 20, "dt_id_dev": 20, "dt_ratio_q6": 12, "hd": 7, "hd_dev": 7,
-    "dt_bus": 16, "burst": 4, "id_known": 1, "can_id": 11, "dlc": 4,
-    "pl_violation": 7, "pl_popcount": 7, "id_rate": 12, "bus_rate": 12,
-}
-
 
 def tree_to_tables(est, feature_names):
     """Flatten an sklearn tree into integer node tables."""
@@ -131,7 +120,7 @@ def prune_equivalent(tree: dict) -> dict:
 
 
 def predict_tables(model, X) -> np.ndarray:
-    """Reference integer implementation, the thing the RTL must match."""
+    """Reference integer implementation of the frozen forest."""
     votes = np.zeros(len(X), dtype=np.int32)
     for tree in model["trees"]:
         f = np.asarray(tree["feature"])
@@ -164,7 +153,7 @@ def main() -> None:
     ap.add_argument("--max-nodes", type=int, default=0,
                     help="hard cap on total comparator nodes. The robust "
                          "policy maximises feature spread, which will happily "
-                         "pick a large forest; this keeps it in budget.")
+                         "pick a large forest; this keeps it small.")
     ap.add_argument(
         "--feature-set", default="timing",
         help="timing excludes can_id and id_known, so the model cannot fall "
@@ -245,7 +234,6 @@ def main() -> None:
     model = {
         "feature_set": args.feature_set,
         "feature_names": cols,
-        "feature_widths": [FEATURE_WIDTH[c] for c in cols],
         "n_trees": int(pick.n_trees),
         "trees": pruned_trees,
         "cost": forest_cost(clf),
@@ -269,7 +257,7 @@ def main() -> None:
 
     # The integer tables must reproduce sklearn's trees exactly on both
     # truncations. The comparison is against the hard majority vote, not
-    # clf.predict, because the voter in the RTL counts one bit per tree.
+    # clf.predict, because that is the rule the frozen model uses.
     for name, X in (("train", Xtr), ("test", Xte)):
         a = majority_predict(clf, X)
         b = predict_tables(model, X)

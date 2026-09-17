@@ -1,8 +1,13 @@
-# Random forest CAN IDS for FPGA
+# Random forest CAN IDS
 
-Per-frame intrusion detection on a CAN bus, sized to run on an FPGA inside a
-1 ms budget. The flow goes from a raw HCRL car-hacking CSV to synthesizable
-Verilog that has been simulated against the Python model frame by frame.
+Per-frame intrusion detection on a CAN bus. The flow goes from a raw HCRL
+car-hacking CSV to a small, frozen random forest whose decision logic you can
+read.
+
+The models are deliberately tiny and every feature is an integer, so this
+stays portable to a hardware implementation later. The Verilog that did that
+was removed on request to keep the project focused on the models; see
+[Recovering the RTL](#recovering-the-rtl) if it is wanted back.
 
 ## The dataset
 
@@ -26,6 +31,35 @@ not sit in a fixed column.
 `data/normal_run_data.txt` is HCRL's separate attack-free capture, 988 871
 frames in a different whitespace-separated layout, read by
 `load_hcrl_normal_txt`.
+
+### A second, independent dataset
+
+`src/syncan_data.py` reads the **SynCAN** benchmark (ETAS GmbH / Robert Bosch),
+whose `test_flooding` set is a DoS on a legitimate ID. It is a different vehicle
+model, a different format and a different research group, so it is the closest
+thing here to an out-of-sample test.
+
+    Hanselmann, Strauss, Dormann, Ulmer, "CANet: An Unsupervised Intrusion
+    Detection System for High Dimensional CAN Bus Data", IEEE Access 8, 2020.
+    https://github.com/etas/SynCAN
+
+Two differences change what it can measure. It gives **signal values, not
+payload bytes**, so a payload is reconstructed by quantising each signal to 16
+bits; prefer the `no_payload` feature set there and treat anything
+payload-derived as describing the reconstruction. And it labels **every ID
+inside an attacked window**, not only the injected frames, so its labels answer
+"is the bus under attack now" rather than "was this frame injected".
+
+Its licence permits academic and non-commercial research and requires citation
+but **forbids redistributing the data**, so the CSVs stay out of this repo.
+Fetch it yourself:
+
+```bash
+git clone --depth 1 https://github.com/etas/SynCAN /tmp/syncan
+cd /tmp/syncan && unzip -q test_flooding.zip
+python3 src/prepare.py --csv /tmp/syncan/test_flooding.csv --format syncan \
+    --out results/syncan/cache.npz --baseline-out results/syncan/baseline.json
+```
 
 Generated traces from `src/make_trace.py` are kept as `data/synth_*.csv`. They
 are used for the adaptive-attacker analysis below, which the real DoS capture
@@ -54,8 +88,8 @@ clean frames from the training truncation only.
 
 ## Features
 
-Twelve integers, all computable in one pass from state the FPGA holds in one
-BRAM indexed by the 11-bit CAN ID.
+Fourteen integers, all computable in one streaming pass from a small amount of
+state kept per CAN ID.
 
 | # | feature | what it is |
 |---|---|---|
@@ -111,16 +145,16 @@ and `no_rate` drops the two rate buckets, so the gain from each group is
 measurable rather than asserted. `paper` is the reference design's two features,
 kept as a control.
 
-## Scoring matches the hardware voter
+## Scoring uses a majority vote
 
 `RandomForestClassifier.predict` averages per-tree class *probabilities* and then
-takes an argmax. The voter in the RTL cannot do that: it sees one bit per tree
-and counts. The two agree on shallow, cleanly separated trees and diverge once
+takes an argmax. This project scores a hard majority vote instead: each tree
+gives one bit and the bits are counted. The two agree on shallow, cleanly separated trees and diverge once
 leaves are mixed.
 
-Scoring the sweep with sklearn's own `predict` therefore reports an accuracy the
-hardware does not achieve. Everything here is scored with a hard majority vote
-instead. This was not caught by reading the code, it was caught by the assertion
+The two agree on shallow, cleanly separated trees and diverge once leaves are
+mixed, so the two scoring rules are not interchangeable and the reported numbers
+have to match the rule the frozen model actually uses. This was not caught by reading the code, it was caught by the assertion
 in `select_model.py` that the exported integer tables must reproduce the trained
 model exactly: on a 9-tree depth-8 forest it reported 1064 mismatches.
 
@@ -250,6 +284,25 @@ drives cleanly. Recall drops to 93.4 % there because the model was trained
 against a flood of a known ID and the DoS capture floods an unknown one, which
 argues for training on a mix of attack styles rather than one.
 
+### SynCAN, an independent benchmark
+
+Scored on SynCAN's own held-out slice, with its window labels:
+
+| feature set | best accuracy | recall | comparators |
+|---|---|---|---|
+| timing and rate only | 97.11 % | 92.53 % | 508 |
+| the same at eight comparators | 96.74 % | 92.03 % | 8 |
+| reference paper, 2 features | 88.22 % | **59.56 %** | 9 |
+
+The reference design's two features lose a third of all attacks on data neither
+design was tuned against, while timing and rate hold 92 %. That gap is the case
+for the extra features, measured out of sample rather than argued.
+
+Note the per-frame recall is capped by the labelling: a frame of some other ID
+inside an attacked window is labelled attack, so no per-frame detector can score
+100 % against these labels. The bus-rate feature happens to fire for every ID
+during a flood, which is why the numbers land as high as they do.
+
 ## Reading the trees
 
 `src/show_trees.py` prints any frozen forest as trees you can follow by eye,
@@ -263,8 +316,7 @@ Where the same forest lives, in three forms:
 
 | file | form | for |
 |---|---|---|
-| `results/<tag>/model.json` | integer node tables | the Verilog generator and the reference predictor |
-| `rtl/<tag>/rf_forest.v` | one wire per comparator, nested muxes | synthesis |
+| `results/<tag>/model.json` | integer node tables | the reference predictor, and anything that consumes the model |
 | `src/show_trees.py` output | indented tree with units | reading |
 
 ### How a verdict is reached
@@ -273,11 +325,11 @@ Every tree sees the same features and votes ATTACK or normal. The frame is
 flagged when a majority of trees vote ATTACK. Tree counts are always odd so the
 vote cannot tie, the same constraint the reference hardware design imposes.
 
-In hardware the trees are not walked one node at a time. Each internal node
-becomes one magnitude comparator, all of them evaluate simultaneously, and the
-path collapses through a mux tree, so the whole forest resolves in a single
-clock regardless of depth. In `rf_forest.v` that reads as one `wire cN_M` per
-comparator and one nested conditional per tree.
+Nothing about the evaluation is sequential. Every comparison in every tree
+depends only on the feature vector, so all of them can be evaluated at once and
+the depth of a tree costs nothing but the mux chain that selects its leaf. That
+is what made the original hardware version a single clock cycle, and it is why
+depth is close to free while node count is what to keep small.
 
 ### The recommended forest in full
 
@@ -333,108 +385,43 @@ construction and asserted against the unpruned predictions:
 
 Accuracy, false positives and false negatives are all unchanged to the frame.
 
-What it did **not** buy: the synthesized forest is byte identical before and
-after, 33 cells and 25 LUTs either way, because yosys and ABC were already
-eliminating that logic. So for the fully unrolled combinational forest here the
-gain is in model size and readability, and in the node count finally being an
-honest number rather than one inflated by up to 43 %.
-
-It would be a real area saving for a memory-central implementation, where the
-node table lives in BRAM and is walked one node per cycle. There every node
-costs storage and a cycle, so 14 nodes against 8 is a genuine difference. Worth
-knowing if the design is ever moved to that style to save LUTs.
-
-## Hardware
-
-```
-feature extraction   3 cycles   (latch, per-ID fetch, compute)
-forest + voter       1 cycle    (combinational, registered output)
-total                4 cycles   = 40 ns at 100 MHz
-budget               1 ms per frame
-margin               25 000x
-```
-
-Latency is fixed, not data dependent: the forest is unrolled combinationally,
-so there is no worst-case path to argue about. The detector ceiling is 25 M
-frames/s against a CAN 1 Mbit/s ceiling of about 21 k frames/s, so the bus is
-the bottleneck by three orders of magnitude.
-
-### Area, measured
-
-Synthesised with yosys 0.33, `synth_xilinx -family xc7`, on the recommended
-3-tree model. Parse any run with `src/syn_report.py`:
-
-| module | LUT | FF | RAMB36 | RAMB18 | DSP48 | CARRY4 |
-|---|---|---|---|---|---|---|
-| `can_ids_features` | 785 | 320 | 11 | 11 | 2 | 58 |
-| `rf_forest` | 25 | 2 | 0 | 0 | 0 | 2 |
-| **total** | **810** | **322** | **11** | **11** | **2** | **60** |
-
-33 BRAM18 equivalents, plus 8 distributed `RAM256X1S`.
-
-**The forest is 3.1 % of the LUTs.** The trees are nearly free. The feature
-extractor and its per-ID memories are the entire design, which is the strongest
-form of the argument for keeping the forest small: a bigger forest buys almost
-nothing in accuracy and costs almost nothing in area, so the interesting
-engineering is all in the features.
-
-Two earlier estimates in this file were wrong and are corrected above: the LUT
-count was understated by about 1.9x, and the reciprocal multiply was given as
-one DSP48 when the design uses two, the second being the rate bucket.
-
-Synthesise against a real architecture. Generic `synth` has no block-RAM
-primitive, so it maps the 2048-entry per-ID arrays to flip-flops and reports
-458 128 cells with 221 623 registers. That measures the target, not the design.
-
-### The obvious next optimisation
-
-Memory is dominated by the 2048-entry direct-mapped ID table, 562 kbit of which
-the real captures use 27 entries. An ID-to-slot index ROM (2048 x 5 bit) feeding
-a 32-entry table would cut that to roughly 2 BRAM18, a 16x reduction, at the
-cost of one more pipeline cycle. Not done here: 33 BRAM18 already fits
-comfortably on a mid-range part (an Artix-7 35T has 100), and the change would
-need the RTL re-verified. Worth doing for a small or cost-sensitive target.
+What it did **not** buy, when the RTL still existed: the synthesised forest was
+byte identical before and after, 25 LUTs either way, because yosys and ABC were
+already eliminating that logic. So the gain is model size, readability, and a
+node count that is finally honest rather than inflated by up to 43 %. It would
+be a real saving for an implementation that stores the node table and walks it
+one node at a time, where every node costs storage and a step.
 
 ## Verification
 
-Two testbenches, both comparing against the Python pipeline frame by frame:
+The trained thresholds convert to integers with zero loss, because every
+feature is an integer and `x <= 2.5` is exactly `x <= 2` for integer `x`.
+`select_model.py` asserts that the exported integer tables reproduce the
+trained model exactly on both truncations, against a hard majority vote rather
+than sklearn's own `predict`, and it refuses to write a model if they differ.
 
-* `tb_rf_forest.v` replays the whole test truncation through the generated
-  forest and checks every verdict.
-* `tb_can_ids_top.v` feeds raw CAN frames into `can_ids_top` and checks the
-  verdicts, so it covers the feature extractor, the per-ID state RAM, the
-  baseline ROMs and the forest together.
-
-The trained thresholds convert to integers with zero loss, because every feature
-is an integer and `x <= 2.5` is exactly `x <= 2` for integer `x`.
-`select_model.py` asserts that the integer tables reproduce sklearn exactly on
-both truncations rather than assuming it.
-
-Last run, on the selected 3-tree 12-comparator model:
-
-Last run, on both frozen models:
-
-```
-real DoS model, 7 trees / 23 comparators
-  tb_rf_forest     300000 real test vectors, 0 mismatches   PASS
-  tb_can_ids_top   200000 real CAN frames,   0 mismatches   PASS
-
-recommended model, 3 trees / 14 comparators   (rtl/recommended/)
-  tb_rf_forest     300000 test vectors,      0 mismatches   PASS
-  tb_can_ids_top   200000 real CAN frames,   0 mismatches   PASS
-
-integer tables vs sklearn trees: 0 mismatches on train, 0 on test
-```
-
-The end-to-end testbench matters most now that the feature extractor holds a
-stateful leaky-bucket recurrence per ID. A rate bucket that drifts by one count
-between the model and the RTL would silently change verdicts, so it is checked
-frame by frame rather than spot-checked.
+`prune_equivalent` is asserted the same way: the pruned trees must predict
+identically to the unpruned ones, frame for frame.
 
 `run_all.sh` refuses to continue if either truncation ends up with no attack
 frames or no normal frames. A short capture whose attack bursts all land in one
 half will otherwise train a model that predicts "normal" for everything and
 still reports a plausible-looking accuracy.
+
+## Recovering the RTL
+
+The Verilog was removed on request. It is intact in git history at commit
+`b915807`, where both testbenches passed at zero mismatches against the Python
+pipeline and the design synthesised to 810 LUTs, 322 flip-flops, 33 BRAM18
+equivalents and 2 DSP48 on xc7.
+
+```bash
+git checkout b915807 -- "random forest ids/rtl"
+git checkout b915807 -- "random forest ids/src/export_verilog.py" \
+                        "random forest ids/src/export_rom.py" \
+                        "random forest ids/src/syn_report.py" \
+                        "random forest ids/src/hw_report.py"
+```
 
 ## Layout
 
@@ -447,17 +434,13 @@ src/features.py        streaming integer feature extraction
 src/prepare.py         truncation split, baseline fit, feature cache
 src/sweep.py           forest geometry sweep
 src/select_model.py    pick and freeze a model, assert integer exactness
-src/export_rom.py      per-ID baseline ROM contents
-src/export_verilog.py  generate the forest RTL and both testbenches
-src/hw_report.py       area, latency and throughput budget
 src/report.py          markdown report of every sweep
 src/show_trees.py      print a frozen forest as readable trees
-src/syn_report.py      parse yosys statistics into a resource table
+src/syncan_data.py     loader for the SynCAN benchmark
+src/export_viz_data.py collect every result into one JSON for charting
 src/cross_eval.py      score one frozen model against other attack styles
 src/attack_on_real.py  inject a flood into HCRL's real attack-free capture
-rtl/can_ids_features.v feature extractor
-rtl/can_ids_top.v      top level
-run_all.sh             CSV in, verified Verilog out
+run_all.sh             CSV in, trained forest out
 ```
 
 ## Known limitations

@@ -36,10 +36,10 @@ def main() -> None:
 
     lines = ["# Random forest CAN IDS: accuracy versus hardware cost", ""]
     lines += [
-        "`nodes` counts internal comparator nodes summed over the forest, which",
-        "is what the FPGA pays for in area. Latency is a fixed 4 cycles per",
-        "frame in every configuration, so depth does not change the timing",
-        "budget, only the area.",
+        "`nodes` counts internal comparator nodes summed over the forest. Depth",
+        "is tracked separately because it costs very little: every comparison",
+        "depends only on the feature vector, so nothing about evaluating a tree",
+        "is inherently sequential.",
         "",
     ]
 
