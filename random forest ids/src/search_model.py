@@ -30,7 +30,8 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 
 sys.path.insert(0, os.path.dirname(__file__))
-from eval_windows import GRACE_S, alarm_intervals, attack_windows  # noqa: E402
+from eval_windows import (GRACE_S, alarm_intervals,            # noqa: E402
+                          attack_windows, classify, merge_episodes)
 from features import FEATURE_SETS                              # noqa: E402
 from select_model import (forest_cost, predict_tables,          # noqa: E402
                           prune_equivalent, tree_to_tables)
@@ -44,6 +45,12 @@ TRACES = [
     ("s316", "stealth 0x316"),
     ("lowrate", "2x low-rate flood"),
     ("mixed", "mixed-rate floods"),
+    # An hour of ordinary traffic with rare short bursts across all 27 victim
+    # IDs. This is the trace that matters most and the one the other six
+    # flatter: at 1.8 % attack traffic there is enough clean driving for a
+    # false-alarm rate to mean something, and rotating the victim exposes
+    # models whose thresholds only fit a 10 ms ID.
+    ("soak", "1 hour soak, rare bursts"),
 ]
 
 
@@ -74,21 +81,20 @@ def score_trace(tr, model, m: float, cols):
     """Window detection and false alarms for one candidate on one trace."""
     idx = [tr["columns"].index(c) for c in cols]
     pred = predict_tables(model, tr["X"][:, idx])
-    ev = alarm_intervals(tr["t"], tr["can_id"], pred, m)
+    ev = merge_episodes(alarm_intervals(tr["t"], tr["can_id"], pred, m))
     wins = tr["wins"]
+    inside, ring, false = classify(ev, wins)
 
     hit, lat = 0, []
     for ws, we in wins:
-        over = [(a, b) for a, b, _ in ev if b >= ws and a <= we + GRACE_S]
+        over = [(a, b) for a, b, _ in inside if b >= ws and a <= we + GRACE_S]
         if over:
             hit += 1
             lat.append(max(0.0, min(a for a, _ in over) - ws) * 1000.0)
-    fa = sum(1 for a, b, _ in ev
-             if not any(b >= ws - GRACE_S and a <= we + GRACE_S
-                        for ws, we in wins))
+    fa = len(false)
     return {
         "windows": len(wins), "detected": hit, "false_alarms": fa,
-        "per_hour": fa / tr["clean_h"],
+        "ringing": len(ring), "per_hour": fa / tr["clean_h"],
         "worst_ms": float(np.max(lat)) if lat else float("nan"),
         "median_ms": float(np.median(lat)) if lat else float("nan"),
     }

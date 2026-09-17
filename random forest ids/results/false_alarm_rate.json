@@ -1,0 +1,82 @@
+[
+ {
+  "m": 1.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 2.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 3.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 4.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 5.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 6.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 8.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 10.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 12.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ },
+ {
+  "m": 16.0,
+  "events": 0,
+  "per_hour": 0.0,
+  "minutes_between": Infinity,
+  "ids": [],
+  "seconds_alarming": 0
+ }
+]

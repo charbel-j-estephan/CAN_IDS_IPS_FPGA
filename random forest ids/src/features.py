@@ -105,6 +105,21 @@ FEATURE_SETS = {
     # would describe a reconstruction instead of the real frame.
     "no_payload": ["dt_id", "dt_id_dev", "dt_ratio_q6", "dt_bus", "burst",
                    "dlc", "id_rate", "bus_rate"],
+    # Only features that are relative to what the ID itself normally does, so
+    # a threshold learned on a 10 ms ID means the same thing on a 100 ms one.
+    #
+    # This exists because the opposite failed, measurably. A forest trained on
+    # two 10 ms victim IDs put absolute thresholds in three of its five trees
+    # -- one rooted on dt_id <= 5458 us, two on burst -- and those three then
+    # voted "normal" on a 100 ms ID flooded at 8x its rate. The two trees using
+    # dt_ratio_q6 and id_rate voted attack on 99 % and 96 % of those same
+    # frames, so the right answer was there and the majority buried it. Taking
+    # the absolute features away is the same move as taking can_id away: it
+    # removes a shortcut that happens to work on the training victims.
+    "scale_free": ["dt_ratio_q6", "id_rate", "bus_rate"],
+    # scale-free plus the bus-level timing, which is an absolute microsecond
+    # count but describes the bus rather than any one ID's period
+    "scale_free_bus": ["dt_ratio_q6", "id_rate", "bus_rate", "dt_bus", "dlc"],
     # the two features the reference paper uses
     "paper": ["dt_id_dev", "hd_dev"],
 }

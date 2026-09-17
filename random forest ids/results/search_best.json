@@ -1,0 +1,145 @@
+{
+ "feature_set": "no_payload",
+ "feature_names": [
+  "dt_id",
+  "dt_id_dev",
+  "dt_ratio_q6",
+  "dt_bus",
+  "burst",
+  "dlc",
+  "id_rate",
+  "bus_rate"
+ ],
+ "n_trees": 1,
+ "trees": [
+  {
+   "feature": [
+    6,
+    0,
+    0,
+    0,
+    0
+   ],
+   "threshold": [
+    135,
+    1955,
+    0,
+    0,
+    0
+   ],
+   "left": [
+    1,
+    2,
+    0,
+    0,
+    0
+   ],
+   "right": [
+    4,
+    3,
+    0,
+    0,
+    0
+   ],
+   "is_leaf": [
+    0,
+    0,
+    1,
+    1,
+    1
+   ],
+   "value": [
+    0,
+    0,
+    1,
+    0,
+    1
+   ],
+   "feature_names": [
+    "dt_id",
+    "dt_id_dev",
+    "dt_ratio_q6",
+    "dt_bus",
+    "burst",
+    "dlc",
+    "id_rate",
+    "bus_rate"
+   ]
+  }
+ ],
+ "cost": {
+  "internal_nodes": 2,
+  "max_depth": 2
+ },
+ "search": {
+  "set": "no_payload",
+  "trees": 1,
+  "depth_cfg": 2,
+  "max_features": "all",
+  "seed": 0,
+  "comparators": 2,
+  "real_depth": 2,
+  "detected": 143,
+  "windows": 143,
+  "false_alarms": 0,
+  "worst_ms": 56.3969612121582
+ },
+ "per_trace": {
+  "dos": {
+   "windows": 73,
+   "detected": 73,
+   "false_alarms": 0,
+   "per_hour": 0.0,
+   "worst_ms": 18.678903579711914,
+   "median_ms": 3.795146942138672
+  },
+  "zid": {
+   "windows": 5,
+   "detected": 5,
+   "false_alarms": 0,
+   "per_hour": 0.0,
+   "worst_ms": 4.716157913208008,
+   "median_ms": 3.668069839477539
+  },
+  "vid": {
+   "windows": 5,
+   "detected": 5,
+   "false_alarms": 0,
+   "per_hour": 0.0,
+   "worst_ms": 5.502223968505859,
+   "median_ms": 3.406047821044922
+  },
+  "s2c0": {
+   "windows": 5,
+   "detected": 5,
+   "false_alarms": 0,
+   "per_hour": 0.0,
+   "worst_ms": 5.502223968505859,
+   "median_ms": 3.406047821044922
+  },
+  "s316": {
+   "windows": 5,
+   "detected": 5,
+   "false_alarms": 0,
+   "per_hour": 0.0,
+   "worst_ms": 5.502223968505859,
+   "median_ms": 3.668069839477539
+  },
+  "lowrate": {
+   "windows": 7,
+   "detected": 7,
+   "false_alarms": 0,
+   "per_hour": 0.0,
+   "worst_ms": 55.01103401184082,
+   "median_ms": 53.312063217163086
+  },
+  "mixed": {
+   "windows": 43,
+   "detected": 43,
+   "false_alarms": 0,
+   "per_hour": 0.0,
+   "worst_ms": 56.3969612121582,
+   "median_ms": 6.165981292724609
+  }
+ }
+}
