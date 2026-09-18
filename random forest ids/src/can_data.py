@@ -14,8 +14,48 @@ loader handles that, and returns fixed-width integer arrays.
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
+
+
+def _require(path: str) -> str:
+    """Fail with something an operator can act on, not a pandas traceback.
+
+    The dataset files are not in the repository and never will be, so a
+    missing one is the single most likely way a first run fails. A bare
+    FileNotFoundError buried under fifteen frames of pandas internals does
+    not say which file, where it was looked for, or what it should have been
+    called, and all three are knowable here.
+    """
+    if os.path.exists(path):
+        return path
+
+    where = os.path.abspath(path)
+    lines = [f"cannot find {path!r}", f"  looked in: {where}"]
+
+    folder = os.path.dirname(where) or "."
+    if os.path.isdir(folder):
+        have = sorted(f for f in os.listdir(folder)
+                      if f.lower().endswith((".csv", ".txt")))
+        lines.append(f"  {folder} holds: "
+                     + (", ".join(have) if have else "no .csv or .txt files"))
+        # HCRL ships DoS_dataset.csv; this project expects DoS_real.csv
+        want = os.path.basename(path).lower()
+        near = [f for f in have
+                if f.lower() != want
+                and f.lower().split("_")[0] == want.split("_")[0]]
+        if near:
+            lines.append(f"  did you mean to rename {near[0]!r} to "
+                         f"{os.path.basename(path)!r}?")
+    else:
+        lines.append(f"  {folder} does not exist")
+
+    lines.append("  the dataset files are not in this repository: see "
+                 "LOCAL_TEST.md for which two to download and where to put "
+                 "them")
+    raise SystemExit("\n".join(lines))
 
 MAX_COLS = 12  # timestamp + id + dlc + 8 data bytes + flag
 
@@ -43,7 +83,7 @@ def load_hcrl_csv(path: str, nrows: int | None = None, skiprows: int = 0) -> pd.
     payload (uint64, MSB-first, zero padded), label (0 normal / 1 attack).
     """
     raw = pd.read_csv(
-        path,
+        _require(path),
         header=None,
         names=list(range(MAX_COLS)),
         dtype=str,
@@ -113,7 +153,7 @@ def load_hcrl_normal_txt(path: str, nrows: int | None = None) -> pd.DataFrame:
     not from the normal frames of a capture that is already under attack.
     """
     raw = pd.read_csv(
-        path,
+        _require(path),
         sep=r"\s+",
         header=None,
         names=list(range(15)),
