@@ -12,11 +12,15 @@ positive counts and the millisecond latencies.
 | run | frames | result | worst | false alarms |
 |---|---|---|---|---|
 | real HCRL DoS | 1 649 597 | 73 / 73 | 31.9 ms | 0 |
-| phase, midpoint 2x | 2 968 784 | 19 / 19 | 149.9 ms | 0 |
-| creep, 1.2x | 2 969 078 | 17 / 17 | 142.8 ms | 0 |
+| phase, midpoint 2x | 2 968 784 | 19 / 19 | 100.0 ms | 0 |
+| creep, 1.2x | 2 969 078 | 17 / 17 | 83.5 ms | 0 |
 | ramp, 1.2x to 8x | 2 980 702 | 21 / 21 | 119.4 ms | 0 |
 | single injected frame | 2 966 635 | 0 / 22 | &mdash; | 0 |
 | 1 hour soak | 6 962 927 | 48 / 48 | 399.6 ms | 0 |
+
+Those phase and creep figures are from after the voting-logic fix in
+`0fa4c18`; the reproduction run predates it and recorded 149.9 ms and 142.8 ms.
+Window counts were identical either way.
 
 The synthetic traces come out byte-identical because `np.random.default_rng`
 is reproducible across platforms for a given seed, so a mismatch in any of
@@ -98,6 +102,7 @@ baseline       27 IDs, bus interval 240 us  ->  results/detector/baseline.json
 the whole detector:
   flag a frame when  id_rate > 80  OR  dt_ratio_q6 <= 39
   that is 2 comparators on 2 features, no attack data used
+  verified: the frozen tables reproduce that rule on 6 boundary cases
 ```
 
 That rule is the entire classifier. Three comparator nodes, two features.
@@ -183,6 +188,20 @@ on one frame, and that is a property of the design rather than a bug.
 ```bash
 python3 src/show_trees.py --model results/detector/model.json
 ```
+
+## 7. Audit it
+
+Per-attack confusion matrices and false positive rates, generalisation to IDs
+held out of the baseline, what each comparator contributes, single-frame
+latency at N=1, and the memory footprint:
+
+```bash
+python3 src/audit.py
+```
+
+Read section 1 before deciding what to do with the output of this detector: the
+per-frame false positive rate is 11 to 12 % during a flood, and it is the
+reason this is an IDS rather than an inline per-frame IPS.
 
 ## Optional: retrain a forest instead of calibrating
 
