@@ -447,6 +447,32 @@ frames before it was fixed.
 
 ## Hardware
 
+```bash
+python3 src/export_verilog.py --verify
+```
+
+writes `results/verilog/can_ids_classifier.v` and then proves it:
+
+```
+verified against the Python model over the ENTIRE input space:
+  16,777,216 points, 0 mismatches
+```
+
+Both features are 12 bits, so the whole input space is 16.7 M points and
+iverilog sweeps it in under a minute. Exhaustive rather than sampled, because
+threshold boundaries are exactly where a hand-written comparator goes wrong and
+a sample is free to miss them. The module is combinational:
+
+```verilog
+wire le_id_rate_80     = (id_rate     <= 12'd80);
+wire le_dt_ratio_q6_39 = (dt_ratio_q6 <= 12'd39);
+wire tree0 = (le_id_rate_80 && le_dt_ratio_q6_39) || !le_id_rate_80;
+assign attack = tree0;
+```
+
+Nothing is quantised on the way out. Every threshold and every feature was
+already an integer, which is why the extractor was built that way.
+
 Measured by `src/audit.py`, not estimated.
 
 | | |
@@ -501,8 +527,9 @@ is not the constraint; ingestion from the CAN controller is.
   `gear_dataset.csv` and `RPM_dataset.csv` change payload contents without
   changing timing, so a rate-and-timing detector is the wrong shape for them
   and they would need different features.
-- **No RTL.** The Verilog and its yosys/Icarus flow were removed on request.
-  `git show b915807` has the last version.
+- **The RTL is the classifier only.** `src/export_verilog.py` emits the
+  comparator logic and the vote. The feature extraction and the per-ID state
+  table, which are 29.0 KiB against the module's 52 bits, are not generated.
 
 ## Layout
 
@@ -525,6 +552,9 @@ src/seed_stability.py    retrains one shape across seeds
 src/false_alarm_rate.py  the attack-free control
 src/ringing.py           separates recovery transients from false positives
 src/show_trees.py        prints the rules in English
+src/audit.py             per-attack FPR, held-out IDs, ablation, latency, size
+src/export_verilog.py    the classifier as Verilog, --verify proves equivalence
+src/export_split.py      writes the train/test truncations out as CSVs
 src/build_dashboard.py   generates results/dashboard.html from the results
 LOCAL_TEST.md            the local run, command by command
 HISTORY.md               the superseded trained-forest write-up
