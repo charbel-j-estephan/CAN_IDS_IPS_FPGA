@@ -64,6 +64,8 @@ def main() -> None:
         D["final"] = v["final"]
     if "adversarial" in v:
         D["adversarial"] = v["adversarial"]
+    if "audit" in v:
+        D["audit"] = v["audit"]
 
     fw = v.get("firmware", {})
     dep = fw.get(args.model)

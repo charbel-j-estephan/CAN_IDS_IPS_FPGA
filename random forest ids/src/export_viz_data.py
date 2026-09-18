@@ -209,6 +209,12 @@ def main() -> None:
     if adv:
         payload["adversarial"] = adv
 
+    # the audit: per-attack FPR, the control, footprint and latency
+    ap_ = os.path.join(args.results, "audit.json")
+    if os.path.exists(ap_):
+        with open(ap_) as fh:
+            payload["audit"] = json.load(fh)
+
     for path in sorted(glob.glob(os.path.join(args.results, "cross_eval*.json"))):
         name = os.path.basename(path).replace(".json", "")
         with open(path) as fh:
@@ -224,6 +230,7 @@ def main() -> None:
     print(f"  windows     {payload.get('window_order', [])}")
     print(f"  firmware    {list(payload.get('firmware', {}))}")
     print(f"  rate_floor  {list(payload.get('rate_floor', {}))}")
+    print(f"  audit       {'yes' if 'audit' in payload else 'no'}")
     print(f"  final       {'yes' if 'final' in payload else 'no'}"
           f", adversarial {len(payload.get('adversarial', []))} modes")
 

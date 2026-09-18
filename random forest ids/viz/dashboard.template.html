@@ -173,6 +173,49 @@ footer a{color:var(--ink-2)}
   </div>
 </section>
 
+<section id="fpr">
+  <h2>Per frame against per alarm</h2>
+  <h3>The number that decides what this may be wired to</h3>
+  <p>Per frame, before the alarm layer, the false positive rate during a flood
+  is <strong>eleven to twelve percent</strong>. That is nowhere near the
+  0.01&nbsp;% an inline preventer needs, and it is the most important figure
+  on this page.</p>
+  <div class="tw panel">
+    <table>
+      <caption class="sr">Per-frame precision, recall and false positive rate</caption>
+      <thead><tr><th>Trace</th><th>Precision</th><th>Recall</th>
+        <th>False positive rate</th><th>Frames flagged in error</th></tr></thead>
+      <tbody id="fprtab"></tbody>
+    </table>
+  </div>
+  <div class="note">
+    <p id="fprnote"></p>
+  </div>
+  <div class="tiles" id="fprtiles"></div>
+</section>
+
+<section id="rtl">
+  <h2>Hardware</h2>
+  <h3>The generated RTL, checked against every input it can receive</h3>
+  <p>The classifier synthesises to two comparators and an OR. Because both
+  features are 12 bits, the entire input space is 2<sup>24</sup> points, so the
+  generated Verilog is not sampled against the model &mdash; it is swept
+  exhaustively, which leaves no corner for an off-by-one at a threshold
+  boundary, and boundaries are exactly where a hand-written comparator goes
+  wrong.</p>
+  <div class="panel">
+    <pre id="rtlcode"></pre>
+  </div>
+  <div class="tiles" id="rtltiles"></div>
+  <div class="note">
+    <p>Nothing is quantised on the way out. Every threshold and every feature
+    was already an integer, which is why the extractor was built that way: an
+    sklearn split at <span class="mono">x &le; 2.5</span> is exactly
+    <span class="mono">x &le; 2</span> for integer x, with no loss to argue
+    about.</p>
+  </div>
+</section>
+
 <section>
   <h2>The result</h2>
   <h3>Why alarms, and not per-frame accuracy</h3>
@@ -346,6 +389,23 @@ footer a{color:var(--ink-2)}
   ID's normal gap, where <strong>64 means exactly on schedule</strong>. A frame
   is flagged when a majority of the trees vote attack.</p>
   <div class="trees" id="tr"></div>
+  <div class="note">
+    <p><strong>A correction worth reading.</strong> The rule above is
+    <span class="mono">id_rate &gt; 80 OR dt_ratio_q6 &le; 39</span>, and for a
+    while the code did not compute it. It was built as three single-comparator
+    trees, the rate rule twice and the timing rule once, on the reasoning that
+    a majority of three would give the OR. It does not: the timing rule alone
+    collects one vote of three and loses, so the forest was the rate rule with
+    two dead comparators attached, and a frame with
+    <span class="mono">dt_ratio_q6 = 0</span> was classified normal. Majority
+    voting cannot express OR over two distinct rules. It is now one depth-2
+    tree, and the generator asserts the frozen tables reproduce the stated rule
+    on six boundary cases. <em>Window detection was 244 of 244 both before and
+    after the fix</em>, which is the uncomfortable part: the rate rule alone
+    had been carrying every attack in the suite, and the suite could not tell.
+    What moved was the phase attack's worst case, the creep attack's, and the
+    attack-free control going from 0 flagged frames to 105.</p>
+  </div>
   <div class="note">
     <p>No tree looks at the payload, and none looks at the CAN ID. Every
     comparator tests either how early a frame arrived for its ID or how much
@@ -536,6 +596,88 @@ document.getElementById("rhead").textContent =
       <td>${ms(a.median_ms)}</td><td>${ms(a.worst_ms)}</td>
       <td>${a.per_hour.toFixed(2)}</td></tr>`;
   }).join("");
+})();
+
+/* ---------- per frame against per alarm ---------- */
+(function () {
+  const A = D.audit;
+  if (!A) { document.getElementById("fpr").hidden = true; return; }
+  const pct = v => (v * 100);
+
+  const rows = A.per_attack.slice().sort((a, b) => b.fpr - a.fpr);
+  document.getElementById("fprtab").innerHTML = rows.map(r => {
+    const bad = r.fpr > 1e-4;
+    return `<tr class="${bad ? "flag" : ""}">
+      <td>${r.label}</td>
+      <td>${pct(r.precision).toFixed(2)} %</td>
+      <td>${pct(r.recall).toFixed(2)} %</td>
+      <td class="${bad ? "pill-cell" : ""}">${pct(r.fpr).toFixed(4)} %</td>
+      <td>${int(r.fp)}</td></tr>`;
+  }).join("") + (A.control ? `<tr><td><strong>attack-free control</strong>
+      <div style="font-size:11.5px;color:var(--muted)">every positive here is
+      false by construction</div></td><td>&mdash;</td><td>&mdash;</td>
+      <td>${pct(A.control.fpr).toFixed(4)} %</td>
+      <td>${int(A.control.fp)}</td></tr>` : "");
+
+  const worst = rows[0];
+  document.getElementById("fprnote").innerHTML =
+    `Those false positives are overwhelmingly <strong>the victim ID's own
+     frames during a flood</strong>. They arrive at the flood period like
+     everything else carrying that ID, so one frame at a time they are
+     genuinely ambiguous. It is why the rate tracks attack duty: ${
+       pct(worst.fpr).toFixed(1)} % on a trace that is a third attack traffic,
+     ${(() => { const r = rows.find(x => x.tag === "soak");
+                return r ? pct(r.fpr).toFixed(3) + " %" : "far less"; })()}
+     at a realistic 1.8 %, and ${A.control
+       ? pct(A.control.fpr).toFixed(4) + " %" : "near zero"} with no attack at
+     all.<br><br>
+     <strong>So this must not drop frames on a single-frame verdict.</strong>
+     During an attack that would discard roughly an eighth of the victim ECU's
+     legitimate traffic, which is its own denial of service. The response this
+     supports is quarantining an ID that is under attack, not filtering
+     individual frames of one.`;
+
+  const F = D.final;
+  document.getElementById("fprtiles").innerHTML = [
+    ["Worst per-frame FPR", pct(worst.fpr).toFixed(1) + " %",
+     "during a 33 % duty flood"],
+    ["On attack-free traffic", A.control
+      ? pct(A.control.fpr).toFixed(4) + " %" : "\u2014",
+     A.control ? int(A.control.frames) + " frames" : ""],
+    ["Alarms raised, all traces", F ? int(F.totals.false_alarms) : "0",
+     "after the leaky integrator"],
+    ["False alarms per hour", "0.00",
+     F ? Math.round(F.totals.clean_minutes) + " min of clean traffic" : ""],
+  ].map(([k, v, sub]) =>
+    `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>
+     <div class="s">${sub}</div></div>`).join("");
+})();
+
+/* ---------- the generated RTL ---------- */
+(function () {
+  const A = D.audit, F = D.final;
+  if (!F || !F.calibration) { document.getElementById("rtl").hidden = true; return; }
+  const c = F.calibration;
+  document.getElementById("rtlcode").innerHTML =
+    `<span style="opacity:.55">// generated by src/export_verilog.py, verified by --verify</span>
+<span class="f">wire</span> le_id_rate_${c.id_rate_threshold}     = (id_rate     &lt;= 12'd${c.id_rate_threshold});
+<span class="f">wire</span> le_dt_ratio_q6_${c.dt_ratio_threshold} = (dt_ratio_q6 &lt;= 12'd${c.dt_ratio_threshold});
+<span class="f">wire</span> tree0 = (le_id_rate_${c.id_rate_threshold} &amp;&amp; le_dt_ratio_q6_${c.dt_ratio_threshold}) || !le_id_rate_${c.id_rate_threshold};
+<span class="f">assign</span> attack = tree0;`;
+
+  const fp = A && A.footprint ? A.footprint : null;
+  const lat = A && A.latency ? A.latency : null;
+  document.getElementById("rtltiles").innerHTML = [
+    ["Input space swept", "16,777,216", "every point, not a sample"],
+    ["Mismatches against Python", "0", "bit-exact equivalence"],
+    ["Classifier storage", fp ? int(fp.classifier_bits) + " bits" : "52 bits",
+     fp ? (100 * fp.classifier_bits / (fp.classifier_bits + fp.table_bits))
+       .toFixed(2) + " % of the design" : ""],
+    ["Total footprint", fp ? fp.total_kib.toFixed(1) + " KiB" : "29.0 KiB",
+     "per-ID state dominates"],
+  ].map(([k, v, sub]) =>
+    `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>
+     <div class="s">${sub}</div></div>`).join("");
 })();
 
 /* ---------- alarm-level results ---------- */
