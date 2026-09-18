@@ -44,13 +44,37 @@ def leaf(value: int) -> dict:
             "is_leaf": 1, "value": value}
 
 
-def one_comparator(fidx: int, thr: int, cols, attack_when_le: bool) -> dict:
-    """A single-comparator tree: feature <= thr decides, one way or the other."""
-    lo, hi = (1, 0) if attack_when_le else (0, 1)
+def or_tree(rate_idx: int, rate_thr: int,
+            ratio_idx: int, ratio_thr: int, cols) -> dict:
+    """One depth-2 tree computing `rate > R OR ratio <= T`.
+
+    It has to be one tree, and getting that wrong is worth recording. The
+    first version used three single-comparator trees -- the rate rule twice
+    and the timing rule once -- on the reasoning that a majority of three
+    would give the OR. It does not. The timing rule alone collects one vote
+    out of three and loses, so the forest reduced to the rate rule with two
+    dead comparators bolted on, and a frame with dt_ratio_q6 = 0 (an ID with
+    no baseline at all, the most anomalous timing possible) was classified
+    normal. Majority voting cannot express OR over two distinct rules: two
+    copies of A give A, two copies of B give B.
+
+    A single tree can, in the same two comparators:
+
+        if rate > R            -> ATTACK
+        else if ratio <= T     -> ATTACK
+        else                   -> normal
+
+    and a one-tree forest's majority is just that tree.
+    """
     return {
-        "feature": [fidx, 0, 0], "threshold": [int(thr), 0, 0],
-        "left": [1, 0, 0], "right": [2, 0, 0],
-        "is_leaf": [0, 1, 1], "value": [0, lo, hi],
+        # node 0: rate <= R ?  yes -> node 1 (check timing), no -> ATTACK leaf
+        # node 1: ratio <= T ? yes -> ATTACK leaf,           no -> normal leaf
+        "feature": [rate_idx, ratio_idx, 0, 0, 0],
+        "threshold": [int(rate_thr), int(ratio_thr), 0, 0, 0],
+        "left": [1, 3, 0, 0, 0],
+        "right": [2, 4, 0, 0, 0],
+        "is_leaf": [0, 0, 1, 1, 1],
+        "value": [0, 0, 1, 1, 0],
         "feature_names": list(cols),
     }
 
@@ -91,19 +115,13 @@ def main() -> None:
     cols = FEATURE_SETS[args.set]
     ri, di = cols.index("id_rate"), cols.index("dt_ratio_q6")
 
-    # Three trees so the majority vote is the OR of the two rules: either
-    # comparator alone gives two votes out of three. Same cost as the rules.
-    trees = [
-        one_comparator(ri, rate_thr, cols, attack_when_le=False),
-        one_comparator(di, ratio_thr, cols, attack_when_le=True),
-        one_comparator(ri, rate_thr, cols, attack_when_le=False),
-    ]
+    trees = [or_tree(ri, rate_thr, di, ratio_thr, cols)]
     model = {
         "feature_set": args.set,
         "feature_names": cols,
-        "n_trees": 3,
+        "n_trees": 1,
         "trees": trees,
-        "cost": {"internal_nodes": 3, "leaves": 6, "max_depth": 1,
+        "cost": {"internal_nodes": 2, "leaves": 3, "max_depth": 2,
                  "features_used": sorted({ri, di}), "n_features_used": 2},
         "calibration": {
             "clean_frames": n,
@@ -127,6 +145,24 @@ def main() -> None:
     print(f"  flag a frame when  id_rate > {rate_thr}"
           f"  OR  dt_ratio_q6 <= {ratio_thr}")
     print(f"  that is 2 comparators on 2 features, no attack data used")
+
+    # assert the tables really compute the OR, rather than trusting the shape
+    from select_model import predict_tables
+    probe = np.array([[0, 64], [ratio_thr, 64], [ratio_thr + 1, 64],
+                      [64, rate_thr], [64, rate_thr + 1], [64, 64]],
+                     dtype=np.int32)
+    order = [cols.index("dt_ratio_q6"), cols.index("id_rate")]
+    grid = np.zeros((len(probe), len(cols)), dtype=np.int32)
+    grid[:, order[0]] = probe[:, 0]
+    grid[:, order[1]] = probe[:, 1]
+    got = predict_tables(model, grid)
+    want = ((probe[:, 1] > rate_thr) | (probe[:, 0] <= ratio_thr)).astype(np.int8)
+    bad = [(int(a), int(b), int(g), int(w))
+           for (a, b), g, w in zip(probe, got, want) if g != w]
+    assert not bad, (f"the frozen tables do not compute the stated rule: "
+                     f"{bad} (dt_ratio_q6, id_rate, got, want)")
+    print(f"  verified: the frozen tables reproduce that rule on "
+          f"{len(probe)} boundary cases")
     print(f"\nwrote {args.out}")
 
 

@@ -163,7 +163,7 @@
    "missed": [],
    "windows": 21,
    "detected": 21,
-   "median_ms": 15.631092575176808,
+   "median_ms": 11.089949677966615,
    "worst_ms": 119.42815780639648,
    "false_alarms": 0,
    "per_hour": 0.0,

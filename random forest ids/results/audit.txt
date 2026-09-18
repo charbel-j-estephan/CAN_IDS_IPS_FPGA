@@ -1,0 +1,142 @@
+auditing results/detector/model.json: 2 comparators on 2 features ['dt_ratio_q6', 'id_rate']
+
+==============================================================================
+1. PER-ATTACK CONFUSION MATRIX AND FALSE POSITIVE RATE
+==============================================================================
+Per frame, before the alarm layer. The FPR target for an IPS is under 0.01 %.
+
+attack                               TP      FN      FP  precision   recall      F1       FPR
+---------------------------------------------------------------------------------------------
+DoS, real capture                147864       0    2311     98.46%  100.00%  99.22%   0.1539%
+DoS, 0x000 on clean traffic       93453       0   51316     64.55%  100.00%  78.46%  11.8703%
+flood reusing a valid ID          93451       2   53739     63.49%  100.00%  77.67%  12.4308%
+stealth, replayed payloads        93451       2   53739     63.49%  100.00%  77.67%  12.4308%
+stealth, second victim            93449       4   53741     63.49%  100.00%  77.67%  12.4313%
+low rate, 2x                       9721       2    3882     71.46%   99.98%  83.35%   0.8740%
+mixed rate, 2x to 33x             59298      14   20185     74.60%   99.98%  85.45%   4.6392%
+rare bursts, 1.8 % duty           40812      18   11490     78.03%   99.96%  87.64%   0.1660%
+SynCAN, different vehicle        201121  136548     717     99.64%   59.56%  74.56%   0.0873%
+
+9 of 9 traces exceed the 0.01 % FPR target per frame:
+  stealth, second victim         12.4313 %  (53741 frames of 432305)
+  flood reusing a valid ID       12.4308 %  (53739 frames of 432305)
+  stealth, replayed payloads     12.4308 %  (53739 frames of 432305)
+  DoS, 0x000 on clean traffic    11.8703 %  (51316 frames of 432305)
+  mixed rate, 2x to 33x          4.6392 %  (20185 frames of 435098)
+  low rate, 2x                   0.8740 %  (3882 frames of 444168)
+  rare bursts, 1.8 % duty        0.1660 %  (11490 frames of 6922097)
+  DoS, real capture              0.1539 %  (2311 frames of 1501733)
+  SynCAN, different vehicle      0.0873 %  (717 frames of 821442)
+
+That is the number to report for a per-frame IPS, and it is why this design
+does not act per frame. Those false positives are overwhelmingly the victim
+ID's OWN frames during a flood, which arrive at the flood period and are
+genuinely ambiguous one frame at a time. The alarm layer above resolves them:
+see the attack-free control below, where every alarm would be false by
+construction.
+
+==============================================================================
+1b. THE CONTROL: TRAFFIC WITH NO ATTACK IN IT AT ALL
+==============================================================================
+frames            988871
+duration          8.4 min
+frames flagged    105
+false positive rate 0.010618 %   (target < 0.01 %)
+
+Every positive here is false by construction, so this is the only FPR figure
+that cannot be argued with.
+
+==============================================================================
+2. GENERALISATION TO CAN IDs HELD OUT OF THE BASELINE
+==============================================================================
+Does it detect a flood on an ID it has never seen, or has it just memorised
+the IDs it was calibrated on? The detector uses no can_id feature at all, so
+the question becomes what happens when the per-ID baseline has no entry.
+
+baseline knows 27 IDs; holding out 0x002, 0x131, 0x1f1, 0x2c0, 0x316, 0x370, 0x4b1
+this trace's victim IDs: 0x316  (at least one is held out)
+
+baseline complete      recall  99.98 %   FPR 4.6392 %
+6 IDs unbaselined      recall 100.00 %   FPR 32.6483 %
+
+on the held-out IDs' own injected frames (59312 of them):
+  with a baseline    99.98 % flagged
+  without one        100.00 % flagged
+
+An ID with no baseline has recip 0, so its dt_ratio_q6 is 0 on every frame,
+which satisfies the timing rule unconditionally. Every frame of an unknown ID
+is therefore flagged: 100 % recall on its injected frames and 100 % on its
+legitimate ones too, which is the FPR jump above.
+
+That is whitelist behaviour and it is stated rather than buried. On a CAN bus
+it is defensible, because the ID set is fixed at design time and an ID nobody
+has ever seen is anomalous by existing at all. But it is a property of the
+baseline being empty, not of the model detecting anything, and the honest way
+to ship it is an explicit known-ID check beside the detector rather than an
+accident of a reciprocal being zero. Note also what it means for detection: an
+attacker who floods a brand-new ID is caught trivially, which is why the real
+HCRL capture's 0x000 flood was never the hard case.
+
+==============================================================================
+3. WHAT EACH COMPARATOR CONTRIBUTES
+==============================================================================
+The equivalent of feature_importances_ for a detector that is not a forest:
+turn each rule off and measure what is lost.
+
+configuration               recall       FPR   clean-capture FP   worst-trace FPR
+---------------------------------------------------------------------------------
+both rules (shipped)        99.99%    2.270%                105           12.431%
+rate rule only              99.98%    2.214%                  0           12.344%
+timing rule only            99.97%    2.133%                105           11.833%
+
+Per-frame recall saturates at 100 % for all three, so it cannot separate them
+and is not the axis that matters. False positives are. Read the last two
+columns: the timing rule alone is what puts frames on the attack-free capture,
+and the rate rule alone is what drives the worst per-trace FPR. Each is
+carrying a different failure, which is why both are kept -- not because either
+adds recall, because neither does.
+
+==============================================================================
+4. SINGLE-FRAME INFERENCE LATENCY (N=1)
+==============================================================================
+pure-Python, one frame at a time, 20000 frames
+  mean 0.35 us per frame   (2,886,289 frames/s)
+
+That number is interpreter overhead, not the design. It is reported because
+it was asked for, and it is already 2886x inside a 1 ms budget on a
+laptop CPU running Python, which settles the question for any host-side use.
+
+What actually bounds the hardware:
+  2 comparators, depth 2, no data dependence between trees
+  the tree is depth 2 but the logic is an OR of two independent
+    comparisons, so in hardware it is 1 comparator deep plus an OR gate
+  the features cost one 16x16 multiply (dt_ratio_q6, by a stored
+    reciprocal, no divider) and one multiply-shift-add (id_rate)
+  at 500 kbit/s a CAN frame occupies at least 111 bit times, which is 222 us
+  so the budget is ~222 us and the work is a handful of cycles
+
+==============================================================================
+5. MEMORY FOOTPRINT
+==============================================================================
+per-ID state, 2048 entries direct indexed by the 11-bit ID:
+    reciprocal (dt_ratio)     16 bits
+    nominal period            20 bits
+    last timestamp            32 bits
+    rate bucket               12 bits
+    alarm score                4 bits
+    alarm start time          32 bits
+                             ---
+    per ID                   116 bits
+
+  table total   237,568 bits = 29.0 KiB
+  classifier    52 bits (2 comparators)
+  TOTAL         29.0 KiB
+
+The classifier is 0.02 % of the footprint. Shrinking the forest
+from 8 comparators to 3 saved 130 bits; the per-ID table is the design.
+
+Only 27 of the 2048 slots are populated on this bus, so a CAM or a
+hash keyed on the observed IDs would cut the table by ~99 %, at the cost of
+the direct-index lookup being one cycle.
+
+wrote results/audit.json

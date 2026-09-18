@@ -3,12 +3,12 @@
 | trace | windows | detected | median | worst | false alarms | per hour |
 |---|---|---|---|---|---|---|
 | real HCRL DoS capture | 73 | 73 | 1.5 ms | 31.9 ms | 0 | 0.00 |
-| 0x000 flood | 5 | 5 | 1.8 ms | 2.1 ms | 0 | 0.00 |
+| 0x000 flood | 5 | 5 | 1.6 ms | 1.8 ms | 0 | 0.00 |
 | valid-ID flood | 5 | 5 | 1.0 ms | 1.8 ms | 0 | 0.00 |
 | stealth on 0x2c0 | 5 | 5 | 1.0 ms | 1.8 ms | 0 | 0.00 |
 | stealth on 0x316 | 5 | 5 | 1.3 ms | 1.8 ms | 0 | 0.00 |
-| 2x low-rate flood | 7 | 7 | 10.0 ms | 10.0 ms | 0 | 0.00 |
-| mixed-rate floods | 43 | 43 | 3.8 ms | 10.3 ms | 0 | 0.00 |
-| 1 hour soak | 48 | 48 | 6.9 ms | 399.6 ms | 0 | 0.00 |
-| SynCAN flooding | 53 | 53 | 4.9 ms | 15.7 ms | 0 | 0.00 |
+| 2x low-rate flood | 7 | 7 | 8.4 ms | 10.0 ms | 0 | 0.00 |
+| mixed-rate floods | 43 | 43 | 2.5 ms | 10.0 ms | 0 | 0.00 |
+| 1 hour soak | 48 | 48 | 6.1 ms | 399.6 ms | 0 | 0.00 |
+| SynCAN flooding | 53 | 53 | 3.7 ms | 7.2 ms | 0 | 0.00 |
 | **total** | **244** | **244** | | **399.6 ms** | **0** | **0.00** |
