@@ -3,6 +3,12 @@
 Every command below was run end to end before being written down, and the
 numbers shown are the ones it actually printed.
 
+> **Windows / PowerShell:** use `python` everywhere this file says `python3`.
+> Windows has no `python3` command, and inside a virtualenv `python` already
+> resolves to the right interpreter. Everything else works unchanged; the
+> scripts use `os.path` throughout and Python accepts forward slashes in paths
+> on Windows, so `data/normal_run_data.txt` is fine as written.
+
 ## 1. Dependencies
 
 ```bash
@@ -34,6 +40,18 @@ mkdir -p data
 cp /path/to/normal_run_data.txt data/
 cp /path/to/DoS_dataset.csv     data/DoS_real.csv
 ```
+
+PowerShell:
+
+```powershell
+mkdir data -Force
+Copy-Item $HOME\Downloads\normal_run_data.txt data\
+Copy-Item $HOME\Downloads\DoS_dataset.csv     data\DoS_real.csv
+```
+
+Note the rename on the second one: the loader is pointed at `DoS_real.csv`.
+If a file is already in `data/`, skip it &mdash; copying it onto itself is an
+error rather than a no-op.
 
 `data/` is gitignored, so nothing you put there can be committed by accident.
 
