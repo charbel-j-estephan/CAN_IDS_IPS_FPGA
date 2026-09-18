@@ -20,3 +20,6 @@ results/viz_data.json
 
 # Pre-extracted evaluation features, reproducible with src/cache_eval.py.
 results/evcache*/
+
+# Calibration feature cache, rewritten by src/build_detector.py on every run.
+results/detector/clean.npz
