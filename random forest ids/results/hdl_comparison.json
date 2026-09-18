@@ -1,0 +1,36 @@
+[
+ {
+  "comparators": 2,
+  "distinct_comparators": 2,
+  "trees": 1,
+  "bits": 52,
+  "votes_needed": 1,
+  "name": "calibrated",
+  "note": "ships: thresholds from clean traffic, no attack data",
+  "model": "results/detector/model.json",
+  "rtl": "results/verilog/can_ids_classifier.v",
+  "verified": true,
+  "thresholds": [
+   "dt_ratio_q6 <= 39",
+   "id_rate <= 80"
+  ]
+ },
+ {
+  "comparators": 4,
+  "distinct_comparators": 4,
+  "trees": 3,
+  "bits": 104,
+  "votes_needed": 2,
+  "name": "forest",
+  "note": "baseline: CART on labelled attacks, same two features",
+  "model": "results/soak/model_perid.json",
+  "rtl": "results/verilog/can_ids_forest.v",
+  "verified": true,
+  "thresholds": [
+   "dt_ratio_q6 <= 24",
+   "id_rate <= 143",
+   "id_rate <= 152",
+   "id_rate <= 202"
+  ]
+ }
+]

@@ -498,6 +498,44 @@ At 500 kbit/s a CAN frame occupies at least 111 bit times, or 222 us, so the
 per-frame budget is ~222 us against a few clock cycles of work. The deadline
 is not the constraint; ingestion from the CAN controller is.
 
+## The two paths, side by side in RTL
+
+`src/compare_hdl.py` generates both detectors as Verilog, verifies each
+exhaustively, and prints the comparison:
+
+| | trees | comparators | bits | vote | verified | phase attack |
+|---|---|---|---|---|---|---|
+| **calibrated** *(ships)* | 1 | 2 | 52 | 1/1 | 16 777 216 points, 0 mismatches | **19 / 19** |
+| forest *(baseline)* | 3 | 4 | 104 | 2/3 | 16 777 216 points, 0 mismatches | **0 / 19** |
+
+Both are small, both are fast, both are formally equivalent to their models.
+Cost is not what separates them. The thresholds are:
+
+```
+calibrated   dt_ratio_q6 <= 39,  id_rate <= 80
+forest       dt_ratio_q6 <= 24,  id_rate <= 143,  id_rate <= 152,  id_rate <= 202
+```
+
+and the argument of this whole repo is readable straight off that second line:
+
+```
+attack-free traffic never takes id_rate above      71
+a 2x exact-midpoint flood sits at                 131 to 140
+the calibrated rule fires above                    80   -> caught
+the trained forest fires above                    143   -> invisible
+```
+
+The corridor between 71 and 143 is not a subtlety of the model. It is a number
+in the generated Verilog, and an attacker who reads the RTL can pick a rate
+inside it. CART put it there by doing exactly what CART does: it chose the
+split that best separated the floods it was shown, and every flood it was shown
+was faster than 143. Training on more rates moves the corridor rather than
+closing it, because the split still lands between the slowest attack in the set
+and the fastest normal traffic, wherever those happen to fall.
+
+Calibration has no such degree of freedom. It reads the clean maximum, adds a
+margin, and stops.
+
 ## Known limitations
 
 - **One injected frame is not detectable**, by construction. The alarm waits
@@ -554,6 +592,7 @@ src/ringing.py           separates recovery transients from false positives
 src/show_trees.py        prints the rules in English
 src/audit.py             per-attack FPR, held-out IDs, ablation, latency, size
 src/export_verilog.py    the classifier as Verilog, --verify proves equivalence
+src/compare_hdl.py       both paths as RTL, verified, side by side
 src/export_split.py      writes the train/test truncations out as CSVs
 src/build_dashboard.py   generates results/dashboard.html from the results
 LOCAL_TEST.md            the local run, command by command
