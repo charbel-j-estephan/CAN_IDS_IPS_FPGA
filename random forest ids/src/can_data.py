@@ -32,6 +32,17 @@ def _require(path: str) -> str:
     if os.path.exists(path):
         return path
 
+    # HCRL ships DoS_dataset.csv and this project's docs called it
+    # DoS_real.csv, which had people copying 190 MB to rename it. Accept the
+    # name the dataset actually arrives with.
+    alias = {"dos_real.csv": "DoS_dataset.csv",
+             "dos_dataset.csv": "DoS_real.csv"}
+    alt = alias.get(os.path.basename(path).lower())
+    if alt:
+        cand = os.path.join(os.path.dirname(path), alt)
+        if os.path.exists(cand):
+            return cand
+
     where = os.path.abspath(path)
     lines = [f"cannot find {path!r}", f"  looked in: {where}"]
 

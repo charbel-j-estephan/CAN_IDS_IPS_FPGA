@@ -38,7 +38,7 @@ Put both in `data/`:
 ```bash
 mkdir -p data
 cp /path/to/normal_run_data.txt data/
-cp /path/to/DoS_dataset.csv     data/DoS_real.csv
+cp /path/to/DoS_dataset.csv     data/
 ```
 
 PowerShell:
@@ -46,12 +46,15 @@ PowerShell:
 ```powershell
 mkdir data -Force
 Copy-Item $HOME\Downloads\normal_run_data.txt data\
-Copy-Item $HOME\Downloads\DoS_dataset.csv     data\DoS_real.csv
+Copy-Item $HOME\Downloads\DoS_dataset.csv     data\
 ```
 
-Note the rename on the second one: the loader is pointed at `DoS_real.csv`.
-If a file is already in `data/`, skip it &mdash; copying it onto itself is an
-error rather than a no-op.
+Keep HCRL's own filenames. Older revisions of this file told you to rename
+`DoS_dataset.csv` to `DoS_real.csv`, which meant copying 190 MB for nothing;
+the loader now accepts either name, so `--csv data/DoS_dataset.csv` and
+`--csv data/DoS_real.csv` both work whichever one is on disk. If a file is
+already in `data/`, skip it &mdash; copying it onto itself is an error rather
+than a no-op.
 
 `data/` is gitignored, so nothing you put there can be committed by accident.
 
@@ -91,7 +94,7 @@ either way, but the held-out version is what ships.
 python3 src/eval_windows.py \
     --model    results/detector/model.json \
     --baseline results/detector/baseline.json \
-    --csv      data/DoS_real.csv \
+    --csv      data/DoS_dataset.csv \
     --m 1,2,4,8
 ```
 
