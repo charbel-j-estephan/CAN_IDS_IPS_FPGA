@@ -353,48 +353,15 @@
  "rows": [
   {
    "m": 2.0,
-   "missed": [
-    {
-     "window": 2,
-     "start": 216.49450800601196,
-     "seconds": 1.9321789741516397,
-     "victim": 161,
-     "rate": 3.0,
-     "frames": 59
-    },
-    {
-     "window": 23,
-     "start": 1863.1374424356827,
-     "seconds": 1.5611249953508377,
-     "victim": 1440,
-     "rate": 16.0,
-     "frames": 26
-    },
-    {
-     "window": 24,
-     "start": 1962.7609662674754,
-     "seconds": 0.7992992401123047,
-     "victim": 1442,
-     "rate": 5.0,
-     "frames": 5
-    },
-    {
-     "window": 26,
-     "start": 2069.1778920435663,
-     "seconds": 0.9333057403564453,
-     "victim": 1680,
-     "rate": 3.0,
-     "frames": 29
-    }
-   ],
+   "missed": [],
    "windows": 48,
-   "detected": 44,
-   "median_ms": 6.497225319208155,
-   "worst_ms": 39.6768203886495,
+   "detected": 48,
+   "median_ms": 6.856737530370083,
+   "worst_ms": 399.64962005615234,
    "false_alarms": 0,
    "per_hour": 0.0,
    "seam_alarms": 0,
-   "ringing": 8
+   "ringing": 22
   }
  ]
 }
