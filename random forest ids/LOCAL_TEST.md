@@ -3,6 +3,26 @@
 Every command below was run end to end before being written down, and the
 numbers shown are the ones it actually printed.
 
+**Independently reproduced.** On 2026-09-18 the whole sequence was run on
+Windows 11 / PowerShell with a separate Python and a separate pandas and numpy,
+against the same two HCRL files. Every figure matched the Linux run exactly:
+not just the detection counts but the frame totals, the per-frame false
+positive counts and the millisecond latencies.
+
+| run | frames | result | worst | false alarms |
+|---|---|---|---|---|
+| real HCRL DoS | 1 649 597 | 73 / 73 | 31.9 ms | 0 |
+| phase, midpoint 2x | 2 968 784 | 19 / 19 | 149.9 ms | 0 |
+| creep, 1.2x | 2 969 078 | 17 / 17 | 142.8 ms | 0 |
+| ramp, 1.2x to 8x | 2 980 702 | 21 / 21 | 119.4 ms | 0 |
+| single injected frame | 2 966 635 | 0 / 22 | &mdash; | 0 |
+| 1 hour soak | 6 962 927 | 48 / 48 | 399.6 ms | 0 |
+
+The synthetic traces come out byte-identical because `np.random.default_rng`
+is reproducible across platforms for a given seed, so a mismatch in any of
+these numbers means a real difference rather than a platform quirk, and is
+worth chasing rather than shrugging off.
+
 > **Windows / PowerShell:** use `python` everywhere this file says `python3`.
 > Windows has no `python3` command, and inside a virtualenv `python` already
 > resolves to the right interpreter. Everything else works unchanged; the
